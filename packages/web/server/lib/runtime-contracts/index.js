@@ -12,8 +12,10 @@ export const RUNTIME_EVENT_TYPES = Object.freeze([
   'runtime.started',
   'runtime.stopped',
   'task.enqueued',
+  'task.started',
   'task.completed',
   'task.failed',
+  'task.cancelled',
   'provider.negotiated',
   'provider.error',
 ]);
@@ -94,7 +96,7 @@ export function negotiateProviderCapabilities(matrix) {
 }
 
 /**
- * @typedef {'runtime.started' | 'runtime.stopped' | 'task.enqueued' | 'task.completed' | 'task.failed' | 'provider.negotiated' | 'provider.error'} RuntimeEventType
+ * @typedef {'runtime.started' | 'runtime.stopped' | 'task.enqueued' | 'task.started' | 'task.completed' | 'task.failed' | 'task.cancelled' | 'provider.negotiated' | 'provider.error'} RuntimeEventType
  */
 
 /**

@@ -8,8 +8,10 @@ export type RuntimeEventType =
   | 'runtime.started'
   | 'runtime.stopped'
   | 'task.enqueued'
+  | 'task.started'
   | 'task.completed'
   | 'task.failed'
+  | 'task.cancelled'
   | 'provider.negotiated'
   | 'provider.error';
 
