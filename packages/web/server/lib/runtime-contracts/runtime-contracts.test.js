@@ -32,6 +32,7 @@ describe('runtime contracts', () => {
     ).toThrow('Unsupported runtime event type');
 
     expect(isRuntimeEventType('runtime.started')).toBe(true);
+    expect(isRuntimeEventType('tool.queued')).toBe(true);
     expect(isRuntimeEventType('runtime.unknown')).toBe(false);
   });
 

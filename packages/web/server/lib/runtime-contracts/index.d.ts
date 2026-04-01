@@ -13,7 +13,15 @@ export type RuntimeEventType =
   | 'task.failed'
   | 'task.cancelled'
   | 'provider.negotiated'
-  | 'provider.error';
+  | 'provider.error'
+  | 'tool.queued'
+  | 'approval.requested'
+  | 'approval.granted'
+  | 'approval.denied'
+  | 'tool.running'
+  | 'tool.completed'
+  | 'tool.failed'
+  | 'tool.cancelled';
 
 export interface AgentRuntimeHost {
   schemaVersion: RuntimeContractVersion;

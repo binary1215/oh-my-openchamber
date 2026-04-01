@@ -18,6 +18,14 @@ export const RUNTIME_EVENT_TYPES = Object.freeze([
   'task.cancelled',
   'provider.negotiated',
   'provider.error',
+  'tool.queued',
+  'approval.requested',
+  'approval.granted',
+  'approval.denied',
+  'tool.running',
+  'tool.completed',
+  'tool.failed',
+  'tool.cancelled',
 ]);
 
 /**
@@ -96,7 +104,7 @@ export function negotiateProviderCapabilities(matrix) {
 }
 
 /**
- * @typedef {'runtime.started' | 'runtime.stopped' | 'task.enqueued' | 'task.started' | 'task.completed' | 'task.failed' | 'task.cancelled' | 'provider.negotiated' | 'provider.error'} RuntimeEventType
+ * @typedef {'runtime.started' | 'runtime.stopped' | 'task.enqueued' | 'task.started' | 'task.completed' | 'task.failed' | 'task.cancelled' | 'provider.negotiated' | 'provider.error' | 'tool.queued' | 'approval.requested' | 'approval.granted' | 'approval.denied' | 'tool.running' | 'tool.completed' | 'tool.failed' | 'tool.cancelled'} RuntimeEventType
  */
 
 /**
