@@ -37,7 +37,7 @@
     "test:runtime-contracts": "bun test packages/web/server/lib/runtime-contracts/runtime-contracts.test.js",
     "test:omo-inventory": "bun test packages/web/server/lib/omo-inventory/omo-inventory.test.js",
     "test:runtime-host": "bun test packages/web/server/lib/runtime-host/runtime-host.test.js",
-    "test:runtime-persistence": "node ./scripts/pending-test-suite.mjs test:runtime-persistence",
+    "test:runtime-persistence": "bun test packages/web/server/lib/runtime-persistence/runtime-persistence.test.js",
     "test:omo-policy": "node ./scripts/pending-test-suite.mjs test:omo-policy",
     "test:provider-conformance": "bun test packages/web/server/lib/provider-conformance/provider-conformance.test.js",
     "test:provider-adapters": "node ./scripts/pending-test-suite.mjs test:provider-adapters",
