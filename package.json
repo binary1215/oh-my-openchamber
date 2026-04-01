@@ -42,7 +42,7 @@
     "test:provider-conformance": "bun test packages/web/server/lib/provider-conformance/provider-conformance.test.js",
     "test:provider-adapters": "bun test packages/web/server/lib/provider-adapters/provider-adapters.test.js",
     "test:tool-fabric": "bun test packages/web/server/lib/tool-fabric/tool-fabric.test.js",
-    "test:backend-runtime": "node ./scripts/pending-test-suite.mjs test:backend-runtime",
+    "test:backend-runtime": "bun test packages/web/server/lib/runtime-backend/backend-runtime.test.js",
     "test:omo-parity": "node ./scripts/pending-test-suite.mjs test:omo-parity",
     "test:rollout-controls": "node ./scripts/pending-test-suite.mjs test:rollout-controls",
     "clean": "bun run --filter '*' clean",
