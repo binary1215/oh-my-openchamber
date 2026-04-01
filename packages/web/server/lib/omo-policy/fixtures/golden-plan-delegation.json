@@ -1,0 +1,65 @@
+{
+  "scenario": "golden-plan-delegation",
+  "planInput": {
+    "taskState": {
+      "workflowID": "workflow-golden",
+      "phase": "planning",
+      "requestedSteps": [
+        { "role": "planner", "title": "Define implementation scope" },
+        { "role": "executor", "title": "Implement policy engine module" },
+        { "role": "reviewer", "title": "Review and verify policy behavior" }
+      ]
+    },
+    "recentRuntimeEvents": []
+  },
+  "delegationInputs": [
+    {
+      "taskState": {
+        "workflowID": "workflow-golden",
+        "phase": "delegating",
+        "iteration": 1,
+        "pendingDelegations": [
+          { "taskID": "task-plan", "role": "planner", "title": "Prepare implementation plan" }
+        ]
+      },
+      "recentRuntimeEvents": []
+    },
+    {
+      "taskState": {
+        "workflowID": "workflow-golden",
+        "phase": "delegating",
+        "iteration": 2,
+        "pendingDelegations": [
+          { "taskID": "task-exec", "role": "executor", "title": "Implement and test policy module" }
+        ]
+      },
+      "recentRuntimeEvents": []
+    },
+    {
+      "taskState": {
+        "workflowID": "workflow-golden",
+        "phase": "delegating",
+        "iteration": 3,
+        "pendingDelegations": [
+          { "taskID": "task-review", "role": "reviewer", "title": "Audit outputs and handoff" }
+        ]
+      },
+      "recentRuntimeEvents": []
+    }
+  ],
+  "expected": {
+    "taskGraph": {
+      "graphID": "workflow-golden-graph-001",
+      "steps": [
+        { "stepID": "step-0001", "role": "planner", "title": "Define implementation scope" },
+        { "stepID": "step-0002", "role": "executor", "title": "Implement policy engine module" },
+        { "stepID": "step-0003", "role": "reviewer", "title": "Review and verify policy behavior" }
+      ]
+    },
+    "delegations": [
+      { "delegationID": "delegation-0001", "taskID": "task-plan", "targetRole": "planner" },
+      { "delegationID": "delegation-0002", "taskID": "task-exec", "targetRole": "executor" },
+      { "delegationID": "delegation-0003", "taskID": "task-review", "targetRole": "reviewer" }
+    ]
+  }
+}

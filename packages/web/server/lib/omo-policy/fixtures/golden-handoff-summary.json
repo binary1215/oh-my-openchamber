@@ -1,0 +1,39 @@
+{
+  "scenario": "golden-handoff-summary",
+  "input": {
+    "taskState": {
+      "workflowID": "workflow-handoff",
+      "phase": "handoff",
+      "nextOwner": "reviewer",
+      "tasks": [
+        { "taskID": "task-001", "status": "completed" },
+        { "taskID": "task-002", "status": "completed" },
+        { "taskID": "task-003", "status": "running" }
+      ],
+      "issueCodes": ["MISSING_TEST", "MISSING_TEST"]
+    },
+    "recentRuntimeEvents": [
+      {
+        "type": "task.completed",
+        "payload": {
+          "code": "TASK_DONE"
+        }
+      },
+      {
+        "type": "provider.error",
+        "payload": {
+          "code": "RATE_LIMIT"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "schemaVersion": "omo.handoff.v1",
+    "workflowID": "workflow-handoff",
+    "nextOwner": "reviewer",
+    "completedTaskIDs": ["task-001", "task-002"],
+    "outstandingTaskIDs": ["task-003"],
+    "issueCodes": ["MISSING_TEST", "RATE_LIMIT", "TASK_DONE"],
+    "narrative": "Workflow workflow-handoff: 2 completed, 1 outstanding."
+  }
+}

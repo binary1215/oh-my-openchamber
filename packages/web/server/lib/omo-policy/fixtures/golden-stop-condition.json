@@ -1,0 +1,26 @@
+{
+  "scenario": "golden-stop-condition",
+  "input": {
+    "taskState": {
+      "workflowID": "workflow-stop",
+      "phase": "delegating",
+      "iteration": 2,
+      "noProgressCount": 1,
+      "pendingDelegations": [
+        { "taskID": "task-should-not-run", "role": "executor", "title": "Should be blocked by guardrail" }
+      ]
+    },
+    "recentRuntimeEvents": [
+      {
+        "type": "provider.error",
+        "payload": {
+          "code": "PROVIDER_RATE_LIMIT"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "action": "stop_loop",
+    "stopReason": "guardrail_event:provider.error"
+  }
+}
