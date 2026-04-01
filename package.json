@@ -41,7 +41,7 @@
     "test:omo-policy": "bun test packages/web/server/lib/omo-policy/omo-policy.test.js",
     "test:provider-conformance": "bun test packages/web/server/lib/provider-conformance/provider-conformance.test.js",
     "test:provider-adapters": "bun test packages/web/server/lib/provider-adapters/provider-adapters.test.js",
-    "test:tool-fabric": "node ./scripts/pending-test-suite.mjs test:tool-fabric",
+    "test:tool-fabric": "bun test packages/web/server/lib/tool-fabric/tool-fabric.test.js",
     "test:backend-runtime": "node ./scripts/pending-test-suite.mjs test:backend-runtime",
     "test:omo-parity": "node ./scripts/pending-test-suite.mjs test:omo-parity",
     "test:rollout-controls": "node ./scripts/pending-test-suite.mjs test:rollout-controls",
