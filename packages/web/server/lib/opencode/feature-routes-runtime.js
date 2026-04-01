@@ -7,6 +7,8 @@ import { registerSettingsUtilityRoutes } from './core-routes.js';
 import { registerProjectIconRoutes } from './project-icon-routes.js';
 import { registerSkillRoutes } from './skill-routes.js';
 import { registerOpenCodeRoutes } from './routes.js';
+import { registerRuntimeRoutes } from './runtime-routes.js';
+import { createRuntimeBackend } from '../runtime-backend/index.js';
 
 export const createFeatureRoutesRuntime = (dependencies) => {
   const {
@@ -51,6 +53,8 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       getOpenCodeAuthHeaders,
       getOpenCodePort,
       buildAugmentedPath,
+      runtimeBackend,
+      runtimePersistenceBaseDirectory,
     } = routeDependencies;
 
     const { getProviderSources, removeProviderConfig } = await import('./index.js');
@@ -75,6 +79,18 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       getProviderSources,
       removeProviderConfig,
       refreshOpenCodeAfterConfigChange,
+    });
+
+    const runtimeService =
+      runtimeBackend ||
+      createRuntimeBackend({
+        fsPromises,
+        path,
+        baseDirectory: runtimePersistenceBaseDirectory,
+      });
+
+    registerRuntimeRoutes(app, {
+      runtimeBackend: runtimeService,
     });
 
     registerProjectIconRoutes(app, {
