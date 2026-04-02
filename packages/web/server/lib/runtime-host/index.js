@@ -292,6 +292,30 @@ export const createRuntimeHost = ({
     return cloneTask(completedTask);
   };
 
+  const failTask = (taskID, error = null) => {
+    const task = getTaskOrThrow(taskID);
+    if (task.status === 'failed') {
+      return cloneTask(task);
+    }
+
+    if (task.status !== 'running') {
+      return cloneTask(task);
+    }
+
+    const failedTask = transitionTask(task, 'failed', {
+      finishedAt: nowIso(),
+      error: error == null ? null : cloneValue(error),
+    });
+
+    emit('task.failed', failedTask, {
+      fromStatus: task.status,
+      status: 'failed',
+      error: error == null ? null : cloneValue(error),
+    });
+
+    return cloneTask(failedTask);
+  };
+
   const cancelTask = (taskID, reason = 'cancelled') => {
     const task = getTaskOrThrow(taskID);
     if (task.status === 'cancelled') {
@@ -317,9 +341,20 @@ export const createRuntimeHost = ({
   };
 
   const retryTask = (taskID) => {
-    const error = new Error(`runtime-host retryTask is not implemented for task ${taskID}`);
-    error.code = RETRY_NOT_IMPLEMENTED_ERROR_CODE;
-    throw error;
+    const task = getTaskOrThrow(taskID);
+    if (task.status !== 'completed' && task.status !== 'failed' && task.status !== 'cancelled') {
+      const error = new Error(`runtime-host retryTask requires terminal task, received ${task.status}`);
+      error.code = RETRY_NOT_IMPLEMENTED_ERROR_CODE;
+      throw error;
+    }
+
+    return enqueueTask({
+      metadata: {
+        ...cloneValue(task.metadata ?? {}),
+        retryOfTaskID: task.taskID,
+      },
+      correlationID: task.correlationID,
+    });
   };
 
   const subscribe = (listener) => bus.subscribe(listener);
@@ -333,6 +368,7 @@ export const createRuntimeHost = ({
     enqueueTask,
     startTask,
     completeTask,
+    failTask,
     cancelTask,
     retryTask,
     subscribe,

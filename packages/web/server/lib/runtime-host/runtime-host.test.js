@@ -90,13 +90,48 @@ describe('runtime host', () => {
     expect(events.filter((event) => event.type === 'task.cancelled')).toHaveLength(1);
   });
 
-  it('exposes deterministic retry stub error semantics', () => {
+  it('marks running task as failed and emits task.failed', () => {
+    const { host, store } = createTestHost();
+    const events = [];
+    host.subscribe((event) => events.push(event));
+
+    const task = host.enqueueTask({ metadata: { scenario: 'fail' } });
+    host.startTask(task.taskID);
+    const failedTask = host.failTask(task.taskID, { code: 'TOOL_FAILED', message: 'boom' });
+
+    expect(failedTask.status).toBe('failed');
+    expect(failedTask.error).toEqual({ code: 'TOOL_FAILED', message: 'boom' });
+    expect(host.getHostSnapshot().status).toBe('idle');
+    expect(events.map((event) => event.type)).toEqual(['task.enqueued', 'task.started', 'task.failed']);
+    expect(store.getEvents().map((event) => event.type)).toEqual(['task.enqueued', 'task.started', 'task.failed']);
+  });
+
+  it('re-enqueues terminal task deterministically on retry', () => {
     const { host } = createTestHost();
 
-    expect(() => host.retryTask('task-0001')).toThrow('runtime-host retryTask is not implemented');
+    const task = host.enqueueTask({ metadata: { scenario: 'retry-me' } });
+    host.startTask(task.taskID);
+    host.failTask(task.taskID, { code: 'FAILED_ON_PURPOSE' });
+    const retriedTask = host.retryTask(task.taskID);
+
+    expect(retriedTask.taskID).toBe('task-0002');
+    expect(retriedTask.correlationID).toBe(task.correlationID);
+    expect(retriedTask.status).toBe('queued');
+    expect(retriedTask.metadata).toEqual({
+      scenario: 'retry-me',
+      retryOfTaskID: 'task-0001',
+    });
+  });
+
+  it('rejects retry for non-terminal task deterministically', () => {
+    const { host } = createTestHost();
+
+    const task = host.enqueueTask({ metadata: { scenario: 'retry-invalid' } });
+
+    expect(() => host.retryTask(task.taskID)).toThrow('runtime-host retryTask requires terminal task');
 
     try {
-      host.retryTask('task-0001');
+      host.retryTask(task.taskID);
     } catch (error) {
       expect(error.code).toBe(RETRY_ERROR_CODE);
     }

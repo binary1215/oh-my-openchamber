@@ -431,12 +431,13 @@ export const createRuntimeBackend = ({
       } else if (result.status === 'cancelled') {
         host.cancelTask(task.taskID, 'tool invocation cancelled');
       } else {
-        host.completeTask(task.taskID, {
+        host.failTask(task.taskID, {
           toolInvocation: {
             invocationID: invocation.invocationID,
             toolName,
             error: result.error,
           },
+          error: result.error,
         });
       }
     }

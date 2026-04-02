@@ -258,4 +258,35 @@ describe('backend runtime integration', () => {
       custom: { exists: false, path: null },
     });
   });
+
+  it('reports failed tool executions as failed tasks instead of completed tasks', async () => {
+    const baseDirectory = await createTempDirectory();
+    const runtimeBackend = createRuntimeBackend({
+      fsPromises,
+      path,
+      baseDirectory,
+      providerAdapterOptions: {
+        getProviderAuth: () => ({ apiKey: 'test-api-key' }),
+        getProviderSources: () => ({ sources: { auth: { exists: true } } }),
+        resolveOpenCodeEnvConfig: () => ({ configuredOpenCodeHost: null }),
+      },
+    });
+
+    const events = [];
+    runtimeBackend.subscribeEvents((event) => events.push(event));
+
+    const result = await runtimeBackend.runTask({
+      metadata: { scenario: 'failing-tool' },
+      toolInvocation: {
+        toolName: 'runtime.missing',
+        input: {},
+        requiresApproval: false,
+      },
+    });
+
+    expect(result.toolResult.status).toBe('failed');
+    expect(result.task.status).toBe('failed');
+    expect(events.map((event) => event.type)).toContain('task.failed');
+    expect(events.map((event) => event.type)).not.toContain('task.completed');
+  });
 });

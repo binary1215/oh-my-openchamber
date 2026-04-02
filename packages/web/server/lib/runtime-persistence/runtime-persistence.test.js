@@ -94,6 +94,79 @@ describe('runtime persistence', () => {
     });
   });
 
+  it('replays persisted tool and approval trace events without rejecting valid logs', () => {
+    const baseEvents = [
+      createRuntimeEvent({
+        type: 'task.enqueued',
+        runtimeID: 'runtime-trace-test',
+        taskID: 'task-0001',
+        occurredAt: '2026-04-02T00:00:00.000Z',
+        payload: { eventID: 'evt-0001', eventSequence: 1, correlationID: 'corr-0001' },
+      }),
+      createRuntimeEvent({
+        type: 'task.started',
+        runtimeID: 'runtime-trace-test',
+        taskID: 'task-0001',
+        occurredAt: '2026-04-02T00:00:01.000Z',
+        payload: { eventID: 'evt-0002', eventSequence: 2, correlationID: 'corr-0001' },
+      }),
+      createRuntimeEvent({
+        type: 'tool.queued',
+        runtimeID: 'runtime-trace-test',
+        taskID: 'task-0001',
+        occurredAt: '2026-04-02T00:00:01.500Z',
+        payload: { eventID: 'evt-0003', eventSequence: 3, correlationID: 'corr-0001', invocationID: 'tool-1' },
+      }),
+      createRuntimeEvent({
+        type: 'approval.requested',
+        runtimeID: 'runtime-trace-test',
+        taskID: 'task-0001',
+        occurredAt: '2026-04-02T00:00:01.750Z',
+        payload: { eventID: 'evt-0004', eventSequence: 4, correlationID: 'corr-0001', approvalID: 'approval-1' },
+      }),
+      createRuntimeEvent({
+        type: 'approval.granted',
+        runtimeID: 'runtime-trace-test',
+        taskID: 'task-0001',
+        occurredAt: '2026-04-02T00:00:02.000Z',
+        payload: { eventID: 'evt-0005', eventSequence: 5, correlationID: 'corr-0001', approvalID: 'approval-1' },
+      }),
+      createRuntimeEvent({
+        type: 'tool.running',
+        runtimeID: 'runtime-trace-test',
+        taskID: 'task-0001',
+        occurredAt: '2026-04-02T00:00:02.250Z',
+        payload: { eventID: 'evt-0006', eventSequence: 6, correlationID: 'corr-0001', invocationID: 'tool-1' },
+      }),
+      createRuntimeEvent({
+        type: 'tool.failed',
+        runtimeID: 'runtime-trace-test',
+        taskID: 'task-0001',
+        occurredAt: '2026-04-02T00:00:02.500Z',
+        payload: { eventID: 'evt-0007', eventSequence: 7, correlationID: 'corr-0001', invocationID: 'tool-1' },
+      }),
+      createRuntimeEvent({
+        type: 'task.failed',
+        runtimeID: 'runtime-trace-test',
+        taskID: 'task-0001',
+        occurredAt: '2026-04-02T00:00:03.000Z',
+        payload: { eventID: 'evt-0008', eventSequence: 8, correlationID: 'corr-0001', error: { code: 'TOOL_FAILED' } },
+      }),
+    ];
+
+    const replayed = replayRuntimeEvents(baseEvents);
+
+    expect(replayed.host.runtimeID).toBe('runtime-trace-test');
+    expect(replayed.tasks).toHaveLength(1);
+    expect(replayed.tasks[0].status).toBe('failed');
+    expect(replayed.tasks[0].error).toEqual({ code: 'TOOL_FAILED' });
+    expect(replayed.counters).toEqual({
+      taskCounter: 1,
+      correlationCounter: 1,
+      eventCounter: 8,
+    });
+  });
+
   it('fails replay with typed error on out-of-order event sequence', () => {
     const first = createRuntimeEvent({
       type: 'task.enqueued',

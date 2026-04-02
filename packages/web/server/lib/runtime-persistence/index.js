@@ -469,6 +469,20 @@ export const replayRuntimeEvents = (eventsInput) => {
       continue;
     }
 
+    if (
+      event.type === 'tool.queued' ||
+      event.type === 'tool.running' ||
+      event.type === 'tool.completed' ||
+      event.type === 'tool.failed' ||
+      event.type === 'tool.cancelled' ||
+      event.type === 'approval.requested' ||
+      event.type === 'approval.granted' ||
+      event.type === 'approval.denied'
+    ) {
+      updateHostStatusFromTasks(host, tasks);
+      continue;
+    }
+
     throw new RuntimeReplayError(
       REPLAY_ERROR_CODE.MALFORMED_EVENT,
       `Event at index ${index} has unsupported type ${event.type}`,
