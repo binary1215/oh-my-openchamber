@@ -1,0 +1,26 @@
+{
+  "scenario": "golden-planner-flow",
+  "type": "planner-flow",
+  "input": {
+    "taskState": {
+      "workflowID": "workflow-parity-planner",
+      "phase": "planning",
+      "requestedSteps": [
+        { "role": "planner", "title": "Define parity scope" },
+        { "role": "executor", "title": "Implement deterministic harness" },
+        { "role": "reviewer", "title": "Verify golden transcripts" }
+      ]
+    },
+    "recentRuntimeEvents": []
+  },
+  "expected": {
+    "action": "create_plan",
+    "graphID": "workflow-parity-planner-graph-001",
+    "steps": [
+      { "stepID": "step-0001", "role": "planner", "title": "Define parity scope" },
+      { "stepID": "step-0002", "role": "executor", "title": "Implement deterministic harness" },
+      { "stepID": "step-0003", "role": "reviewer", "title": "Verify golden transcripts" }
+    ],
+    "inventoryEntrypoints": ["start-work-hook"]
+  }
+}

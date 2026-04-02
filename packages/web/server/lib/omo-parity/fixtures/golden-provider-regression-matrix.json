@@ -1,0 +1,35 @@
+{
+  "scenario": "golden-provider-regression-matrix",
+  "type": "provider-regression-matrix",
+  "expectedInventoryEntryCount": 38,
+  "expected": {
+    "providers": [
+      {
+        "providerID": "litellm",
+        "streamProtocol": "openai_sse",
+        "toolCallArguments": "json_string",
+        "chatPath": "/chat/completions",
+        "modelsPath": "/models",
+        "negotiationOutcome": "degrade"
+      },
+      {
+        "providerID": "ollama",
+        "streamProtocol": "ollama_ndjson",
+        "toolCallArguments": "json_object",
+        "chatPath": "/api/chat",
+        "modelsPath": "/api/tags",
+        "negotiationOutcome": "accept"
+      },
+      {
+        "providerID": "openai",
+        "streamProtocol": "openai_sse",
+        "toolCallArguments": "json_string",
+        "chatPath": "/v1/chat/completions",
+        "modelsPath": "/v1/models",
+        "negotiationOutcome": "degrade"
+      }
+    ],
+    "inventoryEntryCount": 38,
+    "expectedInventoryEntryCount": 38
+  }
+}

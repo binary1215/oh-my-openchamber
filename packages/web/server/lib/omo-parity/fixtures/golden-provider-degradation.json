@@ -1,0 +1,90 @@
+{
+  "scenario": "golden-provider-degradation",
+  "type": "provider-degradation",
+  "input": {
+    "metadata": {
+      "scenario": "provider-degradation"
+    },
+    "providerID": "openai",
+    "requiredCapabilities": ["chat", "tools", "images"],
+    "degradableCapabilities": ["images"],
+    "toolInvocation": {
+      "toolName": "runtime.echo",
+      "input": {
+        "probe": "provider-degrade"
+      },
+      "requiresApproval": true,
+      "autoApprove": true
+    }
+  },
+  "expected": {
+    "task": {
+      "status": "completed"
+    },
+    "toolResult": {
+      "status": "completed",
+      "ok": true
+    },
+    "negotiation": {
+      "outcome": "degrade",
+      "missingCapabilities": ["images"],
+      "degradedCapabilities": ["images"]
+    },
+    "events": [
+      {
+        "type": "task.enqueued",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 1
+      },
+      {
+        "type": "task.started",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 2
+      },
+      {
+        "type": "provider.negotiated",
+        "taskID": null,
+        "providerID": "openai",
+        "eventSequence": 1
+      },
+      {
+        "type": "tool.queued",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 1
+      },
+      {
+        "type": "approval.requested",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 2
+      },
+      {
+        "type": "approval.granted",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 3
+      },
+      {
+        "type": "tool.running",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 4
+      },
+      {
+        "type": "tool.completed",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 5
+      },
+      {
+        "type": "task.completed",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 3
+      }
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "scenario": "golden-tool-execution",
+  "type": "tool-execution",
+  "input": {
+    "taskID": "task-0001",
+    "toolName": "runtime.echo",
+    "payload": {
+      "ticket": "OMO-11",
+      "intent": "parity"
+    }
+  },
+  "expected": {
+    "result": {
+      "status": "completed",
+      "ok": true,
+      "output": {
+        "echoed": {
+          "ticket": "OMO-11",
+          "intent": "parity"
+        },
+        "mode": "deterministic"
+      }
+    },
+    "invocation": {
+      "taskID": "task-0001",
+      "toolName": "runtime.echo",
+      "payload": {
+        "ticket": "OMO-11",
+        "intent": "parity"
+      }
+    },
+    "events": [
+      {
+        "type": "tool.queued",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 1
+      },
+      {
+        "type": "tool.running",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 2
+      },
+      {
+        "type": "tool.completed",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 3
+      }
+    ]
+  }
+}

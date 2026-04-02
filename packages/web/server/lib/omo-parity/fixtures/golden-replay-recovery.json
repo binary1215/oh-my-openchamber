@@ -1,0 +1,22 @@
+{
+  "scenario": "golden-replay-recovery",
+  "type": "replay-recovery",
+  "expectedReplayEventCount": 5,
+  "expected": {
+    "host": {
+      "runtimeID": "runtime-omo-parity-replay",
+      "status": "idle"
+    },
+    "tasks": [
+      { "taskID": "task-0001", "status": "completed" },
+      { "taskID": "task-0002", "status": "cancelled" }
+    ],
+    "counters": {
+      "taskCounter": 2,
+      "correlationCounter": 2,
+      "eventCounter": 5
+    },
+    "replayEventCount": 5,
+    "expectedReplayEventCount": 5
+  }
+}

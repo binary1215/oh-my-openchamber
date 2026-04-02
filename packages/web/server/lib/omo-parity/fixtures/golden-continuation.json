@@ -1,0 +1,15 @@
+{
+  "scenario": "golden-continuation",
+  "type": "continuation",
+  "input": {
+    "taskState": {
+      "phase": "delegating",
+      "pendingDelegations": []
+    },
+    "recentRuntimeEvents": []
+  },
+  "expected": {
+    "action": "continue_loop",
+    "continuationReason": "waiting_for_new_delegations"
+  }
+}

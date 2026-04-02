@@ -1,0 +1,37 @@
+{
+  "scenario": "golden-cancellation",
+  "type": "cancellation",
+  "input": {
+    "metadata": {
+      "scenario": "cancel-running"
+    },
+    "reason": "manual-cancel"
+  },
+  "expected": {
+    "task": {
+      "taskID": "task-0001",
+      "status": "cancelled",
+      "cancelReason": "manual-cancel"
+    },
+    "events": [
+      {
+        "type": "task.enqueued",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 1
+      },
+      {
+        "type": "task.started",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 2
+      },
+      {
+        "type": "task.cancelled",
+        "taskID": "task-0001",
+        "providerID": null,
+        "eventSequence": 3
+      }
+    ]
+  }
+}

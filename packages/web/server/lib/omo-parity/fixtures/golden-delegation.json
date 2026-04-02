@@ -1,0 +1,55 @@
+{
+  "scenario": "golden-delegation",
+  "type": "delegation",
+  "inputs": [
+    {
+      "taskState": {
+        "phase": "delegating",
+        "pendingDelegations": [
+          { "taskID": "task-compile-fixtures", "role": "planner", "title": "Compile fixture coverage" }
+        ]
+      },
+      "recentRuntimeEvents": []
+    },
+    {
+      "taskState": {
+        "phase": "delegating",
+        "pendingDelegations": [
+          { "taskID": "task-run-parity", "role": "executor", "title": "Run deterministic parity execution" }
+        ]
+      },
+      "recentRuntimeEvents": []
+    },
+    {
+      "taskState": {
+        "phase": "delegating",
+        "pendingDelegations": [
+          { "taskID": "task-review-evidence", "role": "reviewer", "title": "Review parity evidence" }
+        ]
+      },
+      "recentRuntimeEvents": []
+    }
+  ],
+  "expected": {
+    "delegations": [
+      {
+        "action": "delegate_task",
+        "delegationID": "delegation-0001",
+        "taskID": "task-compile-fixtures",
+        "targetRole": "planner"
+      },
+      {
+        "action": "delegate_task",
+        "delegationID": "delegation-0002",
+        "taskID": "task-run-parity",
+        "targetRole": "executor"
+      },
+      {
+        "action": "delegate_task",
+        "delegationID": "delegation-0003",
+        "taskID": "task-review-evidence",
+        "targetRole": "reviewer"
+      }
+    ]
+  }
+}
