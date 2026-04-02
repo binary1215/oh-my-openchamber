@@ -465,6 +465,11 @@ interface ConfigStore {
     settingsAutoCreateWorktree: boolean;
     settingsGitmojiEnabled: boolean;
     settingsZenModel: string | undefined;
+
+    runtimeControlsEnabled: boolean;
+    runtimeRequireTools: boolean;
+    runtimeRequireStructuredOutput: boolean;
+    runtimeRequireStreaming: boolean;
     // Voice provider preference ('browser', 'openai', or 'say' for macOS)
     voiceProvider: 'browser' | 'openai' | 'say';
     setVoiceProvider: (provider: 'browser' | 'openai' | 'say') => void;
@@ -514,6 +519,11 @@ interface ConfigStore {
     setSettingsAutoCreateWorktree: (enabled: boolean) => void;
     setSettingsGitmojiEnabled: (enabled: boolean) => void;
     setSettingsZenModel: (model: string | undefined) => void;
+
+    setRuntimeControlsEnabled: (enabled: boolean) => void;
+    setRuntimeRequireTools: (enabled: boolean) => void;
+    setRuntimeRequireStructuredOutput: (enabled: boolean) => void;
+    setRuntimeRequireStreaming: (enabled: boolean) => void;
     getResolvedGitGenerationModel: () => { providerId: string; modelId: string } | null;
     saveAgentModelSelection: (agentName: string, providerId: string, modelId: string) => void;
     getAgentModelSelection: (agentName: string) => { providerId: string; modelId: string } | null;
@@ -563,6 +573,11 @@ export const useConfigStore = create<ConfigStore>()(
                 settingsAutoCreateWorktree: false,
                 settingsGitmojiEnabled: false,
                 settingsZenModel: undefined,
+
+                runtimeControlsEnabled: true,
+                runtimeRequireTools: true,
+                runtimeRequireStructuredOutput: false,
+                runtimeRequireStreaming: false,
                 // Voice provider preference - load from localStorage or default to 'browser'
                 voiceProvider: (() => {
                     if (typeof window !== 'undefined') {
@@ -1594,6 +1609,22 @@ export const useConfigStore = create<ConfigStore>()(
                     set({ settingsZenModel: model });
                 },
 
+                setRuntimeControlsEnabled: (enabled: boolean) => {
+                    set({ runtimeControlsEnabled: enabled });
+                },
+
+                setRuntimeRequireTools: (enabled: boolean) => {
+                    set({ runtimeRequireTools: enabled });
+                },
+
+                setRuntimeRequireStructuredOutput: (enabled: boolean) => {
+                    set({ runtimeRequireStructuredOutput: enabled });
+                },
+
+                setRuntimeRequireStreaming: (enabled: boolean) => {
+                    set({ runtimeRequireStreaming: enabled });
+                },
+
                 getResolvedGitGenerationModel: () => {
                     const state = get();
                     return resolveGitGenerationModelSelection({
@@ -1827,6 +1858,12 @@ export const useConfigStore = create<ConfigStore>()(
                     settingsAutoCreateWorktree: state.settingsAutoCreateWorktree,
                     settingsGitmojiEnabled: state.settingsGitmojiEnabled,
                     settingsZenModel: state.settingsZenModel,
+
+                    runtimeControlsEnabled: state.runtimeControlsEnabled,
+                    runtimeRequireTools: state.runtimeRequireTools,
+                    runtimeRequireStructuredOutput: state.runtimeRequireStructuredOutput,
+                    runtimeRequireStreaming: state.runtimeRequireStreaming,
+
                     speechRate: state.speechRate,
                     speechPitch: state.speechPitch,
                     speechVolume: state.speechVolume,

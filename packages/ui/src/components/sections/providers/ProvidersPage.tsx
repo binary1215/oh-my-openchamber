@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { openExternalUrl } from '@/lib/url';
 import type { ModelMetadata } from '@/types';
+import { RuntimeControlsPanel } from './RuntimeControlsPanel';
 
 const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
   notation: 'compact',
@@ -989,6 +990,8 @@ export const ProvidersPage: React.FC = () => {
             </div>
           </section>
         </div>
+
+        <RuntimeControlsPanel />
 
         {/* Models */}
         <div className="mb-8">

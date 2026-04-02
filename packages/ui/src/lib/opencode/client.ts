@@ -117,6 +117,113 @@ export type DirectorySwitchResult = {
   models?: unknown[];
 };
 
+export type RuntimeCapability = string;
+
+export type RuntimeProviderNegotiationOutcome =
+  | 'accept'
+  | 'degrade'
+  | 'refuse'
+  | (string & {});
+
+export type RuntimeTaskStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | (string & {});
+
+export type RuntimeSession = {
+  sessionID: string;
+  runtimeID: string;
+  createdAt: string;
+  metadata: Record<string, unknown>;
+};
+
+export type RuntimePolicyAction = {
+  action: string;
+  [key: string]: unknown;
+};
+
+export type RuntimeCreateSessionResponse = {
+  session: RuntimeSession;
+  host?: unknown;
+  policyAction?: RuntimePolicyAction;
+};
+
+export type RuntimeToolInvocationRequest = {
+  toolName?: string;
+  input?: Record<string, unknown>;
+  requiresApproval?: boolean;
+  autoApprove?: boolean;
+};
+
+export type RuntimeTask = {
+  taskID: string;
+  runtimeID: string;
+  status: RuntimeTaskStatus;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  metadata: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  cancelReason?: string;
+};
+
+export type RuntimeProviderNegotiation = {
+  providerID: string;
+  outcome: RuntimeProviderNegotiationOutcome;
+  acceptedCapabilities: RuntimeCapability[];
+  missingCapabilities: RuntimeCapability[];
+  degradedCapabilities: RuntimeCapability[];
+  reason?: string;
+  capabilitySnapshot?: unknown;
+  adapterSnapshot?: {
+    providerID: string;
+    supportsStreaming: boolean;
+    supportsTools: boolean;
+    supportsImages: boolean;
+  } | null;
+};
+
+export type RuntimeToolResult = {
+  invocationID: string;
+  status: 'completed' | 'failed' | 'cancelled' | (string & {});
+  ok: boolean;
+  output?: unknown;
+  error?: unknown;
+} | null;
+
+export type RuntimeRunTaskResponse = {
+  task: RuntimeTask;
+  negotiation: RuntimeProviderNegotiation | null;
+  toolResult: RuntimeToolResult;
+};
+
+export type RuntimeCancelTaskResponse = {
+  task: RuntimeTask;
+};
+
+export type RuntimeArtifactCategory = 'evidence' | 'plans' | 'handoffs';
+
+export type RuntimeArtifactResponse = {
+  category: RuntimeArtifactCategory;
+  fileName: string;
+  content: string;
+};
+
+export type RuntimeSseEvent = {
+  type: string;
+  properties: {
+    runtimeID: string;
+    taskID: string | null;
+    providerID: string | null;
+    occurredAt: string;
+    payload: Record<string, unknown>;
+  };
+};
+
 const normalizeFsPath = (path: string): string => path.replace(/\\/g, "/");
 const FS_LIST_CACHE_TTL_MS = 400;
 
@@ -1544,6 +1651,140 @@ class OpencodeService {
       console.warn('Failed to resolve filesystem home directory:', error);
       return null;
     }
+  }
+
+  private async fetchRuntimeJson<TResponse>(
+    endpoint: string,
+    init: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {}
+  ): Promise<TResponse> {
+    const url = `${this.baseUrl}${endpoint}`;
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        ...(init.headers ?? {}),
+      },
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      const error = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+      const message =
+        typeof error.error === 'string' && error.error.trim().length > 0
+          ? error.error
+          : `Request failed (${response.status})`;
+      throw new Error(message);
+    }
+
+    return payload as TResponse;
+  }
+
+  async createRuntimeSession(input?: { metadata?: Record<string, unknown> }): Promise<RuntimeCreateSessionResponse> {
+    return this.fetchRuntimeJson<RuntimeCreateSessionResponse>('/opencode/runtime/create-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metadata: input?.metadata ?? {} }),
+    });
+  }
+
+  async runRuntimeTask(input: {
+    metadata?: Record<string, unknown>;
+    providerID?: string;
+    requiredCapabilities?: RuntimeCapability[];
+    degradableCapabilities?: RuntimeCapability[];
+    toolInvocation?: RuntimeToolInvocationRequest | null;
+  }): Promise<RuntimeRunTaskResponse> {
+    return this.fetchRuntimeJson<RuntimeRunTaskResponse>('/opencode/runtime/run-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        metadata: input.metadata ?? {},
+        providerID: input.providerID,
+        requiredCapabilities: input.requiredCapabilities,
+        degradableCapabilities: input.degradableCapabilities,
+        toolInvocation: input.toolInvocation ?? null,
+      }),
+    });
+  }
+
+  async cancelRuntimeTask(input: { taskID: string; reason?: string }): Promise<RuntimeCancelTaskResponse> {
+    return this.fetchRuntimeJson<RuntimeCancelTaskResponse>('/opencode/runtime/cancel-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskID: input.taskID, reason: input.reason }),
+    });
+  }
+
+  async negotiateRuntimeProvider(input: {
+    providerID: string;
+    requiredCapabilities?: RuntimeCapability[];
+    degradableCapabilities?: RuntimeCapability[];
+  }): Promise<RuntimeProviderNegotiation> {
+    return this.fetchRuntimeJson<RuntimeProviderNegotiation>('/opencode/runtime/provider-negotiate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerID: input.providerID,
+        requiredCapabilities: input.requiredCapabilities,
+        degradableCapabilities: input.degradableCapabilities,
+      }),
+    });
+  }
+
+  async fetchRuntimeArtifact(category: RuntimeArtifactCategory, fileName: string): Promise<RuntimeArtifactResponse> {
+    const safeName = typeof fileName === 'string' ? fileName.trim() : '';
+    if (!safeName) {
+      throw new Error('fileName is required');
+    }
+
+    const encodedCategory = encodeURIComponent(category);
+    const encodedFileName = encodeURIComponent(safeName);
+    return this.fetchRuntimeJson<RuntimeArtifactResponse>(`/opencode/runtime/artifacts/${encodedCategory}/${encodedFileName}`);
+  }
+
+  subscribeRuntimeEvents(options: {
+    onEvent: (event: RuntimeSseEvent) => void;
+    onError?: (error: unknown) => void;
+    signal?: AbortSignal;
+  }): () => void {
+    if (typeof window === 'undefined') {
+      throw new Error('subscribeRuntimeEvents is only available in the browser runtime');
+    }
+
+    const url = `${this.baseUrl}/opencode/runtime/subscribe-events`;
+    const source = new EventSource(url);
+    const handleMessage = (message: MessageEvent<string>) => {
+      try {
+        const parsed = JSON.parse(message.data) as RuntimeSseEvent;
+        if (!parsed || typeof parsed.type !== 'string' || typeof parsed.properties !== 'object' || !parsed.properties) {
+          return;
+        }
+        options.onEvent(parsed);
+      } catch (error) {
+        options.onError?.(error);
+      }
+    };
+
+    source.addEventListener('message', handleMessage as EventListener);
+    source.addEventListener('error', (event) => {
+      options.onError?.(event);
+    });
+
+    const close = () => {
+      source.removeEventListener('message', handleMessage as EventListener);
+      source.close();
+    };
+
+    if (options.signal) {
+      if (options.signal.aborted) {
+        close();
+      } else {
+        options.signal.addEventListener('abort', close, { once: true });
+      }
+    }
+
+    return close;
   }
 
   async setOpenCodeWorkingDirectory(directoryPath: string | null | undefined): Promise<DirectorySwitchResult | null> {
