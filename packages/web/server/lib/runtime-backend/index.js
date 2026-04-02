@@ -8,6 +8,7 @@ import { normalizeCapabilityMatrix } from '../provider-conformance/index.js';
 import { createRuntimeEvent, negotiateProviderCapabilities } from '../runtime-contracts/index.js';
 import { createInMemoryRuntimeHostStore, createRuntimeEventBus, createRuntimeHost } from '../runtime-host/index.js';
 import { createRuntimeArtifactStore, createRuntimePersistenceStore } from '../runtime-persistence/index.js';
+import { createRuntimeRolloutController } from '../rollout-controls/index.js';
 import { createApprovalBridge, createToolDispatcher, createToolRegistry } from '../tool-fabric/index.js';
 
 const cloneValue = (value) => JSON.parse(JSON.stringify(value));
@@ -72,6 +73,12 @@ const createAdapterForProvider = (providerID, options) => {
   return null;
 };
 
+const createFallbackPolicyAction = (reason) => ({
+  action: 'fallback_to_baseline',
+  reason,
+  details: null,
+});
+
 export const createRuntimeBackend = ({
   fsPromises,
   path,
@@ -82,6 +89,7 @@ export const createRuntimeBackend = ({
   now,
   logger = console,
   providerAdapterOptions = {},
+  rolloutConfig,
 } = {}) => {
   if (!fsPromises || !path) {
     throw new Error('createRuntimeBackend requires fsPromises and path dependencies');
@@ -98,6 +106,10 @@ export const createRuntimeBackend = ({
   });
   const artifactStore = createRuntimeArtifactStore({ fsPromises, path, baseDirectory });
   const policyEngine = createOmoPolicyEngine({ now: nowIso });
+  const rolloutController = createRuntimeRolloutController({
+    config: rolloutConfig,
+    logger,
+  });
 
   let backendEventSequence = 0;
   let sessionCounter = 0;
@@ -149,6 +161,26 @@ export const createRuntimeBackend = ({
     return event;
   };
 
+  const emitRollbackEventIfNeeded = (result, contextPayload) => {
+    if (!result?.rollbackActivated) {
+      return;
+    }
+
+    const rolloutState = rolloutController.getState();
+    publishBackendEvent({
+      type: 'provider.error',
+      payload: {
+        code: 'RUNTIME_ROLLBACK_ACTIVATED',
+        source: 'policy',
+        ...contextPayload,
+        failureCount: rolloutState.failureCount,
+        rollbackTripCount: rolloutState.rollbackTripCount,
+        rollbackReason: rolloutState.rollbackReason,
+        effectiveFlags: rolloutState.effectiveFlags,
+      },
+    });
+  };
+
   host.subscribe((event) => {
     appendRuntimeEventAsync(event);
     persistHostSnapshotAsync();
@@ -193,29 +225,48 @@ export const createRuntimeBackend = ({
       metadata: normalizeMetadata(input.metadata),
     };
 
-    const policyAction = policyEngine.decideNextAction({
-      taskState: {
-        workflowID: session.sessionID,
-        phase: 'planning',
-      },
-      recentRuntimeEvents: hostStore.getEvents().slice(-10),
-    });
+    const policyAction = rolloutController.areAdvancedOmoBehaviorsEnabled()
+      ? policyEngine.decideNextAction({
+          taskState: {
+            workflowID: session.sessionID,
+            phase: 'planning',
+          },
+          recentRuntimeEvents: hostStore.getEvents().slice(-10),
+        })
+      : createFallbackPolicyAction('advanced_omo_disabled');
 
     return {
       session,
       host: host.getHostSnapshot(),
       policyAction,
+      rollout: rolloutController.getState(),
     };
   };
 
   const negotiateProvider = (input = {}) => {
+    if (!rolloutController.isRuntimeTransplantEnabled()) {
+      return {
+        providerID: typeof input.providerID === 'string' ? input.providerID.trim() : '',
+        outcome: 'disabled',
+        acceptedCapabilities: [],
+        missingCapabilities: [],
+        degradedCapabilities: [],
+        reason: 'runtime_transplant_disabled',
+        capabilitySnapshot: null,
+        adapterSnapshot: null,
+        rollout: rolloutController.getState(),
+      };
+    }
+
     const providerID = typeof input.providerID === 'string' ? input.providerID.trim() : '';
     if (!providerID) {
       throw new Error('providerID is required for capability negotiation');
     }
 
     const capabilityMatrix = normalizeCapabilityMatrix();
-    const adapter = createAdapterForProvider(providerID, providerAdapterOptions);
+    const adapter = rolloutController.areProviderAdaptersEnabled()
+      ? createAdapterForProvider(providerID, providerAdapterOptions)
+      : null;
     const providerCapability = capabilityMatrix[providerID] ?? adapter?.capabilities ?? null;
     const required = normalizeCapabilityList(input.requiredCapabilities);
     const degradable = normalizeCapabilityList(input.degradableCapabilities);
@@ -240,6 +291,30 @@ export const createRuntimeBackend = ({
       },
     });
 
+    if (negotiation.outcome === 'refuse') {
+      rolloutController.recordMetric({
+        type: 'provider.negotiation.failed',
+        payload: {
+          providerID,
+          required,
+          missingCapabilities: negotiation.missingCapabilities,
+        },
+      });
+
+      const rollbackResult = rolloutController.recordFailure({
+        reason: 'provider_negotiation_failure_budget',
+        details: {
+          providerID,
+          required,
+          missingCapabilities: negotiation.missingCapabilities,
+        },
+      });
+      emitRollbackEventIfNeeded(rollbackResult, {
+        providerID,
+        trigger: 'provider.negotiation.failed',
+      });
+    }
+
     return {
       providerID,
       outcome: negotiation.outcome,
@@ -256,12 +331,40 @@ export const createRuntimeBackend = ({
             supportsImages: adapter.supportsImages,
           }
         : null,
+      rollout: rolloutController.getState(),
     };
   };
 
   const runTask = async (input = {}) => {
+    rolloutController.recordMetric({
+      type: 'model.call',
+      payload: { hasProvider: typeof input.providerID === 'string' && input.providerID.trim().length > 0 },
+    });
+
+    if (input.retry === true) {
+      rolloutController.recordMetric({
+        type: 'task.retry',
+        payload: { retry: true },
+      });
+    }
+
     const task = host.enqueueTask({ metadata: normalizeMetadata(input.metadata) });
     host.startTask(task.taskID);
+
+    if (!rolloutController.isRuntimeTransplantEnabled()) {
+      host.completeTask(task.taskID, {
+        rollout: {
+          mode: 'baseline',
+          reason: 'runtime_transplant_disabled',
+        },
+      });
+      return {
+        task: host.getTask(task.taskID),
+        negotiation: null,
+        toolResult: null,
+        rollout: rolloutController.getState(),
+      };
+    }
 
     let negotiation = null;
     if (typeof input.providerID === 'string' && input.providerID.trim().length > 0) {
@@ -274,11 +377,14 @@ export const createRuntimeBackend = ({
 
     let toolResult = null;
     if (
+      rolloutController.areAdvancedOmoBehaviorsEnabled() &&
       input.toolInvocation &&
       typeof input.toolInvocation === 'object' &&
       !Array.isArray(input.toolInvocation) &&
       Object.keys(input.toolInvocation).length > 0
     ) {
+      rolloutController.recordMetric({ type: 'tool.call', payload: { taskID: task.taskID } });
+
       const toolName =
         typeof input.toolInvocation.toolName === 'string' && input.toolInvocation.toolName.trim().length > 0
           ? input.toolInvocation.toolName.trim()
@@ -339,10 +445,19 @@ export const createRuntimeBackend = ({
       task: host.getTask(task.taskID),
       negotiation,
       toolResult,
+      rollout: rolloutController.getState(),
     };
   };
 
   const cancelTask = (taskID, reason = 'cancelled') => {
+    rolloutController.recordMetric({
+      type: 'task.cancel',
+      payload: {
+        taskID,
+        reason,
+      },
+    });
+
     const activeCanceller = activeCancellers.get(taskID);
     if (typeof activeCanceller === 'function') {
       activeCanceller(reason);
@@ -359,6 +474,7 @@ export const createRuntimeBackend = ({
     subscribeEvents: (listener) => host.subscribe(listener),
     negotiateProvider,
     readArtifact: (category, fileName) => artifactStore.readArtifact(category, fileName),
+    getRolloutStatus: () => rolloutController.getState(),
     artifactStore,
     host,
   };
