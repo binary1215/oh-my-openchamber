@@ -150,6 +150,9 @@ export const RuntimeControlsPanel: React.FC = () => {
         }
       },
       onError: (error) => {
+        if (!(error instanceof Error) && typeof error !== 'string') {
+          return;
+        }
         setRuntimeError(getErrorMessage(error));
       },
     });
