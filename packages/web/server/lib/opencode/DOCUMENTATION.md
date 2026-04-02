@@ -12,7 +12,7 @@ This module provides OpenCode server integration utilities for the web server ru
 - `packages/web/server/lib/opencode/routes.js`: OpenCode/provider settings and auth-related route registration.
 - `packages/web/server/lib/opencode/lifecycle.js`: OpenCode process lifecycle runtime (startup, restart, readiness, health monitoring).
 - `packages/web/server/lib/opencode/env-runtime.js`: OpenCode CLI/binary resolution and shell environment runtime.
-- `packages/web/server/lib/opencode/env-config.js`: OpenCode-related environment variable parsing and validation (host/port/hostname).
+- `packages/web/server/lib/opencode/env-config.js`: OpenCode-related environment variable parsing and validation (host/port/hostname) plus runtime rollout config resolution.
 - `packages/web/server/lib/opencode/hmr-state-runtime.js`: HMR-persistent runtime state initialization, auth-state bootstrap, and HMR sync helpers.
 - `packages/web/server/lib/opencode/bootstrap-runtime.js`: base app bootstrap runtime for status/auth/tts/notification/OpenChamber route wiring.
 - `packages/web/server/lib/opencode/network-runtime.js`: OpenCode URL construction, health-probe readiness checks, and API prefix runtime.
@@ -137,6 +137,7 @@ This module provides OpenCode server integration utilities for the web server ru
   - `configuredOpenCodeHost`
   - `effectivePort`
   - `configuredOpenCodeHostname`
+  - `runtimeRolloutConfig` (`flags` + `failureBudget` parsed from `OPENCHAMBER_RUNTIME_*` env vars)
 
 ## Public exports (hmr-state-runtime.js)
 - `createHmrStateRuntime(dependencies)`: creates runtime for HMR state container initialization and runtime<->HMR state synchronization.

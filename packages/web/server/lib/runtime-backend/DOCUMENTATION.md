@@ -13,6 +13,12 @@
 - **omo-policy**: `create-session` generates policy decisions (`decideNextAction`) to keep next-action semantics typed.
 - **tool-fabric**: `run-task` supports approval + cancellation flow via `createToolDispatcher` and `createApprovalBridge`.
 - **provider-adapters + contracts**: provider negotiation uses `normalizeCapabilityMatrix()` + `negotiateProviderCapabilities()` and returns typed `outcome/missing/degraded` fields.
+- **rollout-controls**: runtime transplant/provider adapter/advanced OMO flags and deterministic failure-budget rollback are applied before provider/tool/policy paths execute.
+
+## Runtime rollout behavior
+- Runtime transplant, provider adapters, and advanced OMO behavior are independently gated by resolved rollout config.
+- Failure-budget rollbacks are counter-based (`maxFailures` threshold) and can disable runtime transplant as an explicit kill switch.
+- `getRolloutStatus()` exposes runtime rollout state (`effectiveFlags`, `failureCount`, `rollbackTripCount`, metrics, trace events).
 
 ## Runtime endpoints
 - `POST /api/opencode/runtime/create-session`
