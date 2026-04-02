@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 const port = Number(process.env.OPENCHAMBER_E2E_PORT ?? 3001);
 const baseURL = process.env.OPENCHAMBER_E2E_BASE_URL ?? `http://127.0.0.1:${port}`;
+const isWindows = process.platform === 'win32';
 
 export default defineConfig({
   testDir: './e2e',
@@ -13,6 +14,9 @@ export default defineConfig({
     baseURL,
     viewport: { width: 1200, height: 820 },
     trace: 'retain-on-failure',
+    // On Windows, prefer the system Edge channel to avoid
+    // issues with the Playwright-managed Chromium headless shell.
+    ...(isWindows ? { channel: 'msedge' } : {}),
   },
   webServer: {
     command: `bun server/index.js --port ${port}`,
