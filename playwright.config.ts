@@ -19,8 +19,10 @@ export default defineConfig({
     ...(isWindows ? { channel: 'msedge' } : {}),
   },
   webServer: {
-    command: `bun server/index.js --port ${port}`,
-    cwd: './packages/web',
+    // Run server from repo root so .git is available for simple-git,
+    // but execute the web server entrypoint inside packages/web.
+    command: `bun packages/web/server/index.js --port ${port}`,
+    cwd: '.',
     url: baseURL,
     reuseExistingServer: true,
     timeout: 120_000,
