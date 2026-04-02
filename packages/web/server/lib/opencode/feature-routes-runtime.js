@@ -55,6 +55,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       buildAugmentedPath,
       runtimeBackend,
       runtimePersistenceBaseDirectory,
+      runtimeRolloutConfig,
     } = routeDependencies;
 
     const { getProviderSources, removeProviderConfig } = await import('./index.js');
@@ -87,6 +88,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
         fsPromises,
         path,
         baseDirectory: runtimePersistenceBaseDirectory,
+        rolloutConfig: runtimeRolloutConfig,
       });
 
     registerRuntimeRoutes(app, {

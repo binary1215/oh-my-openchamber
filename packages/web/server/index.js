@@ -387,6 +387,7 @@ const {
   configuredOpenCodeHost: ENV_CONFIGURED_OPENCODE_HOST,
   effectivePort: ENV_EFFECTIVE_PORT,
   configuredOpenCodeHostname: ENV_CONFIGURED_OPENCODE_HOSTNAME,
+  runtimeRolloutConfig: ENV_RUNTIME_ROLLOUT_CONFIG,
 } = resolveOpenCodeEnvConfig({
   env: process.env,
   logger: console,
@@ -912,6 +913,7 @@ async function main(options = {}) {
     getOpenCodeAuthHeaders,
     getOpenCodePort: () => openCodePort,
     buildAugmentedPath,
+    runtimeRolloutConfig: ENV_RUNTIME_ROLLOUT_CONFIG,
   });
 
   const startupPipelineResult = await startupPipelineRuntime.run({

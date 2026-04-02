@@ -1,3 +1,5 @@
+import { resolveRuntimeRolloutConfig } from '../rollout-controls/index.js';
+
 export const resolveOpenCodeEnvConfig = (options = {}) => {
   const env = options.env && typeof options.env === 'object' ? options.env : {};
   const logger = options.logger ?? console;
@@ -63,10 +65,13 @@ export const resolveOpenCodeEnvConfig = (options = {}) => {
     return trimmed;
   })();
 
+  const runtimeRolloutConfig = resolveRuntimeRolloutConfig({ env, logger });
+
   return {
     configuredOpenCodePort,
     configuredOpenCodeHost,
     effectivePort,
     configuredOpenCodeHostname,
+    runtimeRolloutConfig,
   };
 };
