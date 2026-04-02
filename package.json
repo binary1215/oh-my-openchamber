@@ -44,7 +44,7 @@
     "test:tool-fabric": "bun test packages/web/server/lib/tool-fabric/tool-fabric.test.js",
     "test:backend-runtime": "bun test packages/web/server/lib/runtime-backend/backend-runtime.test.js",
     "test:omo-parity": "bun test packages/web/server/lib/omo-parity/omo-parity.test.js",
-    "test:rollout-controls": "node ./scripts/pending-test-suite.mjs test:rollout-controls",
+    "test:rollout-controls": "bun test packages/web/server/lib/rollout-controls/rollout-controls.test.js",
     "clean": "bun run --filter '*' clean",
     "postinstall": "patch-package",
     "dev:web": "bun run --cwd packages/web build:watch",
