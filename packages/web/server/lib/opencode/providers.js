@@ -130,16 +130,20 @@ function upsertProviderConfig(providerId, workingDirectory, scope = 'user', prov
   }
 
   const targetConfig = getConfigForPath(layers, targetPath);
-  const providersConfig = isPlainObject(targetConfig.providers) ? targetConfig.providers : {};
-  const existingConfig = isPlainObject(providersConfig[providerId]) ? providersConfig[providerId] : {};
+  const providerConfigMap = isPlainObject(targetConfig.provider) ? targetConfig.provider : {};
+  const existingConfig = isPlainObject(providerConfigMap[providerId]) ? providerConfigMap[providerId] : {};
 
-  targetConfig.providers = {
-    ...providersConfig,
+  targetConfig.provider = {
+    ...providerConfigMap,
     [providerId]: {
       ...existingConfig,
       ...(isPlainObject(providerConfig) ? providerConfig : {}),
     },
   };
+
+  if (isPlainObject(targetConfig.providers)) {
+    delete targetConfig.providers;
+  }
 
   writeConfig(targetConfig, targetPath || CONFIG_FILE);
   return {
