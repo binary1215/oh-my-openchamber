@@ -10,7 +10,8 @@ const RUNTIME_MANAGED_PROVIDERS = Object.freeze({
   ollama: Object.freeze({
     id: 'ollama',
     name: 'Ollama',
-    connectMode: 'config',
+    connectMode: 'api',
+    supportsBaseUrl: true,
     defaultConfig: Object.freeze({
       baseURL: 'http://127.0.0.1:11434',
     }),
@@ -19,6 +20,7 @@ const RUNTIME_MANAGED_PROVIDERS = Object.freeze({
     id: 'litellm',
     name: 'LiteLLM',
     connectMode: 'api',
+    supportsBaseUrl: true,
     defaultConfig: Object.freeze({
       baseURL: 'http://127.0.0.1:4000',
     }),
