@@ -20,6 +20,15 @@ import { copyTextToClipboard } from '@/lib/clipboard';
 import { openExternalUrl } from '@/lib/url';
 import type { ModelMetadata } from '@/types';
 import { RuntimeControlsPanel } from './RuntimeControlsPanel';
+import { isRecord, normalizeAuthType, parseAuthPayload, parseProvidersPayload, type AuthMethod, type ProviderOption, type ProviderSources } from './providerCatalog';
+
+type DisplayProvider = {
+  id: string;
+  name?: string;
+  models?: Array<{ id?: string; name?: string }>;
+  runtimeManaged?: boolean;
+  connectMode?: 'api' | 'config';
+};
 
 const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
   notation: 'compact',
@@ -40,104 +49,6 @@ const formatTokens = (value?: number | null) => {
 };
 
 const ADD_PROVIDER_ID = '__add_provider__';
-
-interface AuthMethod {
-  type?: string;
-  name?: string;
-  label?: string;
-  description?: string;
-  help?: string;
-  method?: number;
-  [key: string]: unknown;
-}
-
-interface ProviderOption {
-  id: string;
-  name?: string;
-}
-
-interface ProviderSourceInfo {
-  exists: boolean;
-  path?: string | null;
-}
-
-interface ProviderSources {
-  auth: ProviderSourceInfo;
-  user: ProviderSourceInfo;
-  project: ProviderSourceInfo;
-  custom?: ProviderSourceInfo;
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const normalizeAuthType = (method: AuthMethod) => {
-  const raw = typeof method.type === 'string' ? method.type : '';
-  const label = `${method.name ?? ''} ${method.label ?? ''}`.toLowerCase();
-  const merged = `${raw} ${label}`.toLowerCase();
-  if (merged.includes('oauth')) return 'oauth';
-  if (merged.includes('api')) return 'api';
-  return raw.toLowerCase();
-};
-
-const parseAuthPayload = (payload: unknown): Record<string, AuthMethod[]> => {
-  if (!isRecord(payload)) {
-    return {};
-  }
-  const result: Record<string, AuthMethod[]> = {};
-  for (const [providerId, value] of Object.entries(payload)) {
-    if (Array.isArray(value)) {
-      result[providerId] = value.filter((entry) => isRecord(entry)) as AuthMethod[];
-    }
-  }
-  return result;
-};
-
-const normalizeProviderEntry = (entry: unknown): ProviderOption | null => {
-  if (typeof entry === 'string') {
-    return { id: entry };
-  }
-  if (!isRecord(entry)) {
-    return null;
-  }
-  const idCandidate =
-    (typeof entry.id === 'string' && entry.id) ||
-    (typeof entry.providerID === 'string' && entry.providerID) ||
-    (typeof entry.slug === 'string' && entry.slug) ||
-    (typeof entry.name === 'string' && entry.name);
-  if (!idCandidate) {
-    return null;
-  }
-  const nameCandidate = typeof entry.name === 'string' ? entry.name : undefined;
-  return { id: idCandidate, name: nameCandidate };
-};
-
-const parseProvidersPayload = (payload: unknown): ProviderOption[] => {
-  let entries: unknown[] = [];
-
-  if (Array.isArray(payload)) {
-    entries = payload;
-  } else if (isRecord(payload)) {
-    if (Array.isArray(payload.all)) {
-      entries = payload.all;
-    } else if (Array.isArray(payload.providers)) {
-      entries = payload.providers;
-    }
-  }
-
-  const mapped = entries
-    .map((entry) => normalizeProviderEntry(entry))
-    .filter((entry): entry is ProviderOption => Boolean(entry));
-
-  const seen = new Set<string>();
-  return mapped.filter((entry) => {
-    if (seen.has(entry.id)) {
-      return false;
-    }
-    seen.add(entry.id);
-    return true;
-  });
-};
 
 export const ProvidersPage: React.FC = () => {
   const providers = useConfigStore((state) => state.providers);
@@ -166,11 +77,35 @@ export const ProvidersPage: React.FC = () => {
   const [providerSources, setProviderSources] = React.useState<Record<string, ProviderSources>>({});
   const [showAuthPanel, setShowAuthPanel] = React.useState(false);
 
-  React.useEffect(() => {
-    if (!selectedProviderId && providers.length > 0) {
-      setSelectedProvider(providers[0].id);
+  const connectedProviders = React.useMemo<DisplayProvider[]>(() => {
+    const connectedById = new Map<string, DisplayProvider>();
+
+    for (const provider of providers) {
+      connectedById.set(provider.id, provider);
     }
-  }, [providers, selectedProviderId, setSelectedProvider]);
+
+    for (const option of availableProviders) {
+      if (!option.connected || connectedById.has(option.id)) {
+        continue;
+      }
+
+      connectedById.set(option.id, {
+        id: option.id,
+        name: option.name || option.id,
+        models: [],
+        runtimeManaged: option.runtimeManaged,
+        connectMode: option.connectMode,
+      });
+    }
+
+    return Array.from(connectedById.values());
+  }, [availableProviders, providers]);
+
+  React.useEffect(() => {
+    if (!selectedProviderId && connectedProviders.length > 0) {
+      setSelectedProvider(connectedProviders[0].id);
+    }
+  }, [connectedProviders, selectedProviderId, setSelectedProvider]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -246,8 +181,8 @@ export const ProvidersPage: React.FC = () => {
   }, []);
 
   const connectedProviderIds = React.useMemo(
-    () => new Set(providers.map((provider) => provider.id)),
-    [providers]
+    () => new Set(connectedProviders.map((provider) => provider.id)),
+    [connectedProviders]
   );
 
   const unconnectedProviders = React.useMemo(
@@ -321,8 +256,21 @@ export const ProvidersPage: React.FC = () => {
     };
   }, [selectedProviderId]);
 
-  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId);
+  const selectedProvider = connectedProviders.find((provider) => provider.id === selectedProviderId);
   const selectedSources = selectedProviderId ? providerSources[selectedProviderId] : undefined;
+
+  const connectRuntimeManagedProvider = async (providerId: string) => {
+    const response = await fetch(`/api/provider/${encodeURIComponent(providerId)}/connect`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(payload?.error || 'Failed to connect provider');
+    }
+  };
 
   const handleSaveApiKey = async (providerId: string) => {
     const apiKey = apiKeyInputs[providerId]?.trim() ?? '';
@@ -347,6 +295,11 @@ export const ProvidersPage: React.FC = () => {
         throw new Error(message);
       }
 
+      const providerOption = availableProviders.find((provider) => provider.id === providerId);
+      if (providerOption?.runtimeManaged) {
+        await connectRuntimeManagedProvider(providerId);
+      }
+
       toast.success('API key saved');
       setApiKeyInputs((prev) => ({ ...prev, [providerId]: '' }));
       await reloadOpenCodeConfiguration({ scopes: ["providers"], mode: "active" });
@@ -354,6 +307,23 @@ export const ProvidersPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to save API key:', error);
       toast.error('Failed to save API key');
+    } finally {
+      setAuthBusyKey(null);
+    }
+  };
+
+  const handleConnectProvider = async (providerId: string) => {
+    const busyKey = `connect:${providerId}`;
+    setAuthBusyKey(busyKey);
+
+    try {
+      await connectRuntimeManagedProvider(providerId);
+      toast.success('Provider connected');
+      await reloadOpenCodeConfiguration({ scopes: ["providers"], mode: "active" });
+      setSelectedProvider(providerId);
+    } catch (error) {
+      console.error('Failed to connect provider:', error);
+      toast.error('Failed to connect provider');
     } finally {
       setAuthBusyKey(null);
     }
@@ -506,7 +476,7 @@ export const ProvidersPage: React.FC = () => {
 
   const isAddMode = selectedProviderId === ADD_PROVIDER_ID;
 
-  if (!isAddMode && providers.length === 0) {
+  if (!isAddMode && connectedProviders.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center text-muted-foreground">
@@ -630,10 +600,32 @@ export const ProvidersPage: React.FC = () => {
                 <p className="typography-meta text-muted-foreground px-2">Loading authentication methods...</p>
               ) : (
                 <section className="px-2 pb-2 pt-0 space-y-4">
-                  <div className="py-1.5">
-                    <label className="typography-ui-label text-foreground flex items-center gap-1.5">
-                      API Key
-                      <Tooltip delayDuration={1000}>
+                  {(() => {
+                    const candidateOption = availableProviders.find((provider) => provider.id === candidateProviderId);
+                    const candidateConnectMode = candidateOption?.connectMode ?? 'api';
+                    if (candidateConnectMode === 'config') {
+                      return (
+                        <div className="py-1.5 space-y-2">
+                          <p className="typography-meta text-muted-foreground">
+                            Connect this provider using its default local runtime endpoint.
+                          </p>
+                          <Button
+                            size="xs"
+                            className="!font-normal"
+                            onClick={() => handleConnectProvider(candidateProviderId)}
+                            disabled={authBusyKey === `connect:${candidateProviderId}`}
+                          >
+                            {authBusyKey === `connect:${candidateProviderId}` ? 'Connecting...' : 'Connect Provider'}
+                          </Button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="py-1.5">
+                      <label className="typography-ui-label text-foreground flex items-center gap-1.5">
+                        API Key
+                        <Tooltip delayDuration={1000}>
                         <TooltipTrigger asChild>
                           <RiInformationLine className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
                         </TooltipTrigger>
@@ -664,7 +656,9 @@ export const ProvidersPage: React.FC = () => {
                         {authBusyKey === `api:${candidateProviderId}` ? 'Saving...' : 'Save Key'}
                       </Button>
                     </div>
-                  </div>
+                      </div>
+                    );
+                  })()}
 
                   {(() => {
                     const candidateAuthMethods = authMethodsByProvider[candidateProviderId] ?? [];
@@ -779,7 +773,9 @@ export const ProvidersPage: React.FC = () => {
     );
   }
 
-  const providerModels = Array.isArray(selectedProvider.models) ? selectedProvider.models : [];
+  const providerModels: Array<{ id?: string; name?: string }> = Array.isArray(selectedProvider.models)
+    ? selectedProvider.models
+    : [];
   const providerAuthMethods = authMethodsByProvider[selectedProvider.id] ?? [];
   const oauthAuthMethods = providerAuthMethods.filter((method) => normalizeAuthType(method) === 'oauth');
 
@@ -833,6 +829,11 @@ export const ProvidersPage: React.FC = () => {
               <div className="py-1.5 typography-meta text-muted-foreground">Loading authentication methods...</div>
             ) : (
               <div className="space-y-4">
+                {selectedProvider.connectMode === 'config' ? (
+                  <div className="py-1.5 typography-meta text-muted-foreground">
+                    This provider uses its default local runtime endpoint and does not require an API key here.
+                  </div>
+                ) : (
                 <div className="py-1.5">
                   <label className="typography-ui-label text-foreground flex items-center gap-1.5">
                     API Key
@@ -868,6 +869,7 @@ export const ProvidersPage: React.FC = () => {
                     </Button>
                   </div>
                 </div>
+                )}
 
                 {oauthAuthMethods.length > 0 && (
                   <div className="space-y-4 border-t border-[var(--surface-subtle)] pt-2">

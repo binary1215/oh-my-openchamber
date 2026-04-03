@@ -6,6 +6,25 @@ import {
   writeConfig,
 } from './shared.js';
 
+const RUNTIME_MANAGED_PROVIDERS = Object.freeze({
+  ollama: Object.freeze({
+    id: 'ollama',
+    name: 'Ollama',
+    connectMode: 'config',
+    defaultConfig: Object.freeze({
+      baseURL: 'http://127.0.0.1:11434',
+    }),
+  }),
+  litellm: Object.freeze({
+    id: 'litellm',
+    name: 'LiteLLM',
+    connectMode: 'api',
+    defaultConfig: Object.freeze({
+      baseURL: 'http://127.0.0.1:4000',
+    }),
+  }),
+});
+
 function getProviderSources(providerId, workingDirectory) {
   const layers = readConfigLayers(workingDirectory);
   const { userConfig, projectConfig, customConfig, paths } = layers;
@@ -90,7 +109,49 @@ function removeProviderConfig(providerId, workingDirectory, scope = 'user') {
   return true;
 }
 
+function upsertProviderConfig(providerId, workingDirectory, scope = 'user', providerConfig = {}) {
+  if (!providerId || typeof providerId !== 'string') {
+    throw new Error('Provider ID is required');
+  }
+
+  const layers = readConfigLayers(workingDirectory);
+  let targetPath = layers.paths.userPath;
+
+  if (scope === 'project') {
+    if (!workingDirectory) {
+      throw new Error('Working directory is required for project scope');
+    }
+    targetPath = layers.paths.projectPath || targetPath;
+  } else if (scope === 'custom') {
+    if (!layers.paths.customPath) {
+      throw new Error('Custom scope is unavailable');
+    }
+    targetPath = layers.paths.customPath;
+  }
+
+  const targetConfig = getConfigForPath(layers, targetPath);
+  const providersConfig = isPlainObject(targetConfig.providers) ? targetConfig.providers : {};
+  const existingConfig = isPlainObject(providersConfig[providerId]) ? providersConfig[providerId] : {};
+
+  targetConfig.providers = {
+    ...providersConfig,
+    [providerId]: {
+      ...existingConfig,
+      ...(isPlainObject(providerConfig) ? providerConfig : {}),
+    },
+  };
+
+  writeConfig(targetConfig, targetPath || CONFIG_FILE);
+  return {
+    providerId,
+    scope,
+    path: targetPath || CONFIG_FILE,
+  };
+}
+
 export {
+  RUNTIME_MANAGED_PROVIDERS,
   getProviderSources,
   removeProviderConfig,
+  upsertProviderConfig,
 };

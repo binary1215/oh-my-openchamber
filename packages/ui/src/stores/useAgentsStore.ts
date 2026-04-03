@@ -111,6 +111,61 @@ export type AgentWithExtras = Agent & {
   group?: string;
 };
 
+const OMO_UI_AGENTS: readonly AgentWithExtras[] = Object.freeze([
+  {
+    name: 'Atlas',
+    description: 'OMO planning and orchestration agent.',
+    mode: 'primary',
+    prompt: '',
+    permission: [],
+    options: {},
+    native: true,
+  },
+  {
+    name: 'Prometheus',
+    description: 'OMO execution planning agent for multi-step implementation.',
+    mode: 'subagent',
+    prompt: '',
+    permission: [],
+    options: {},
+    native: true,
+  },
+  {
+    name: 'Sisyphus',
+    description: 'OMO ultrawork execution agent.',
+    mode: 'primary',
+    prompt: '',
+    permission: [],
+    options: {},
+    native: true,
+  },
+  {
+    name: 'Sisyphus-Junior',
+    description: 'OMO delegated subagent executor.',
+    mode: 'subagent',
+    prompt: '',
+    permission: [],
+    options: {},
+    native: true,
+  },
+]);
+
+const mergeOmoAgents = (agents: readonly AgentWithExtras[]): AgentWithExtras[] => {
+  const byName = new Map<string, AgentWithExtras>();
+
+  for (const agent of agents) {
+    byName.set(agent.name, agent);
+  }
+
+  for (const agent of OMO_UI_AGENTS) {
+    if (!byName.has(agent.name)) {
+      byName.set(agent.name, { ...agent });
+    }
+  }
+
+  return Array.from(byName.values()).sort((left, right) => left.name.localeCompare(right.name));
+};
+
 /** Parse the subfolder group name from an agent file path.
  *  e.g. "~/.config/opencode/agents/business/ceo.md" → "business"
  *  e.g. "~/.config/opencode/agents/ceo.md"          → undefined
@@ -279,9 +334,10 @@ export const useAgentsStore = create<AgentsStore>()(
                   })
                 );
 
-                const nextSignature = buildAgentsSignature(agentsWithScope);
+                const mergedAgents = mergeOmoAgents(agentsWithScope as AgentWithExtras[]);
+                const nextSignature = buildAgentsSignature(mergedAgents);
                 if (previousSignature !== nextSignature) {
-                  set({ agents: agentsWithScope, isLoading: false });
+                  set({ agents: mergedAgents, isLoading: false });
                 } else {
                   set({ isLoading: false });
                 }

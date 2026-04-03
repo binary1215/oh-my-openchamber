@@ -8,20 +8,15 @@ import { RiAddLine, RiStackLine } from '@remixicon/react';
 import { cn } from '@/lib/utils';
 import { SettingsProjectSelector } from '@/components/sections/shared/SettingsProjectSelector';
 import { opencodeClient } from '@/lib/opencode/client';
+import { parseProvidersPayload, type ProviderOption, type ProviderSources } from './providerCatalog';
 
 const ADD_PROVIDER_ID = '__add_provider__';
 
-interface ProviderSourceInfo {
-  exists: boolean;
-  path?: string | null;
-}
-
-interface ProviderSources {
-  auth: ProviderSourceInfo;
-  user: ProviderSourceInfo;
-  project: ProviderSourceInfo;
-  custom?: ProviderSourceInfo;
-}
+type SidebarProvider = {
+  id: string;
+  name?: string;
+  models?: unknown[];
+};
 
 const getCurrentDirectory = (): string | null => {
   const dir = opencodeClient.getDirectory();
@@ -41,6 +36,7 @@ export const ProvidersSidebar: React.FC<ProvidersSidebarProps> = ({ onItemSelect
   const setSelectedProvider = useConfigStore((state) => state.setSelectedProvider);
   const activeProjectId = useProjectsStore((s) => s.activeProjectId);
   const [sourcesByProvider, setSourcesByProvider] = React.useState<Record<string, ProviderSources>>({});
+  const [availableProviders, setAvailableProviders] = React.useState<ProviderOption[]>([]);
   const directory = React.useMemo(() => {
     // tie refresh to active project changes (directory is stored in the client)
     void activeProjectId;
@@ -48,7 +44,59 @@ export const ProvidersSidebar: React.FC<ProvidersSidebarProps> = ({ onItemSelect
   }, [activeProjectId]);
 
   React.useEffect(() => {
-    if (providers.length === 0) {
+    let cancelled = false;
+
+    const loadAvailableProviders = async () => {
+      try {
+        const response = await fetch('/api/provider', {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        if (!cancelled) {
+          setAvailableProviders(parseProvidersPayload(payload));
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    void loadAvailableProviders();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const connectedProviders = React.useMemo<SidebarProvider[]>(() => {
+    const connectedById = new Map<string, SidebarProvider>();
+
+    for (const provider of providers) {
+      connectedById.set(provider.id, provider);
+    }
+
+    for (const option of availableProviders) {
+      if (!option.connected || connectedById.has(option.id)) {
+        continue;
+      }
+
+      connectedById.set(option.id, {
+        id: option.id,
+        name: option.name || option.id,
+        models: [],
+      });
+    }
+
+    return Array.from(connectedById.values());
+  }, [availableProviders, providers]);
+
+  React.useEffect(() => {
+    if (connectedProviders.length === 0) {
       setSourcesByProvider({});
       return;
     }
@@ -56,7 +104,7 @@ export const ProvidersSidebar: React.FC<ProvidersSidebarProps> = ({ onItemSelect
     let cancelled = false;
 
     const loadAllSources = async () => {
-      const tasks = providers.map(async (provider) => {
+      const tasks = connectedProviders.map(async (provider) => {
         try {
           const query = directory ? `?directory=${encodeURIComponent(directory)}` : '';
           const response = await fetch(`/api/provider/${encodeURIComponent(provider.id)}/source${query}`, {
@@ -91,17 +139,17 @@ export const ProvidersSidebar: React.FC<ProvidersSidebarProps> = ({ onItemSelect
     return () => {
       cancelled = true;
     };
-  }, [directory, providers]);
+  }, [connectedProviders, directory]);
 
   const bgClass = 'bg-background';
 
   const projectProviders = React.useMemo(() => {
-    return providers.filter((p) => Boolean(sourcesByProvider[p.id]?.project?.exists));
-  }, [providers, sourcesByProvider]);
+    return connectedProviders.filter((p) => Boolean(sourcesByProvider[p.id]?.project?.exists));
+  }, [connectedProviders, sourcesByProvider]);
 
   const userProviders = React.useMemo(() => {
-    return providers.filter((p) => !sourcesByProvider[p.id]?.project?.exists);
-  }, [providers, sourcesByProvider]);
+    return connectedProviders.filter((p) => !sourcesByProvider[p.id]?.project?.exists);
+  }, [connectedProviders, sourcesByProvider]);
 
   return (
     <div className={cn('flex h-full flex-col', bgClass)}>
@@ -109,7 +157,7 @@ export const ProvidersSidebar: React.FC<ProvidersSidebarProps> = ({ onItemSelect
         <h2 className="text-base font-semibold text-foreground mb-3">Providers</h2>
         <SettingsProjectSelector className="mb-3" />
         <div className="flex items-center justify-between gap-2">
-          <span className="typography-meta text-muted-foreground">Total {providers.length}</span>
+          <span className="typography-meta text-muted-foreground">Total {connectedProviders.length}</span>
           <Button size="sm"
             variant="ghost"
             className="h-7 w-7 px-0 -my-1 text-muted-foreground"
@@ -126,7 +174,7 @@ export const ProvidersSidebar: React.FC<ProvidersSidebarProps> = ({ onItemSelect
       </div>
 
       <ScrollableOverlay outerClassName="flex-1 min-h-0" className="space-y-1 px-3 py-2 overflow-x-hidden">
-        {providers.length === 0 ? (
+        {connectedProviders.length === 0 ? (
           <div className="py-12 px-4 text-center text-muted-foreground">
             <RiStackLine className="mx-auto mb-3 h-10 w-10 opacity-50" />
             <p className="typography-ui-label font-medium">No providers found</p>

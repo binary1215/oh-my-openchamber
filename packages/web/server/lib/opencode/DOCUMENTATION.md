@@ -78,10 +78,13 @@ This module provides OpenCode server integration utilities for the web server ru
 
 ## Public exports (routes.js)
 - `registerOpenCodeRoutes(app, dependencies)`: Registers OpenCode-owned HTTP routes and internal module runtime:
+  - `GET /api/provider`
+  - `GET /api/provider/auth`
   - `GET /api/config/settings`
   - `PUT /api/config/settings`
   - `GET /api/config/opencode-resolution`
   - `POST /api/opencode/directory`
+  - `PUT /api/provider/:providerId/connect`
   - `GET /api/provider/:providerId/source`
   - `DELETE /api/provider/:providerId/auth`
 - Owns lazy auth library loading for provider auth checks/removal.

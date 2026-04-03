@@ -69,6 +69,8 @@ export const createFeatureRoutesRuntime = (dependencies) => {
     registerOpenCodeRoutes(app, {
       crypto,
       clientReloadDelayMs,
+      buildOpenCodeUrl,
+      getOpenCodeAuthHeaders,
       getOpenCodeResolutionSnapshot,
       formatSettingsResponse,
       readSettingsFromDisk,

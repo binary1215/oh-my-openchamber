@@ -23,6 +23,8 @@ const createOpenCodeRouteDependencies = () => ({
   sanitizeProjects: (projects) => projects,
   validateDirectoryPath: async (requestedPath) => ({ ok: true, directory: requestedPath }),
   resolveProjectDirectory: async () => ({ directory: null, error: 'No directory supplied' }),
+  buildOpenCodeUrl: (routePath) => `http://127.0.0.1:65535${routePath}`,
+  getOpenCodeAuthHeaders: () => ({}),
   getProviderSources: (providerID) => ({
     sources: {
       auth: { exists: false },
@@ -33,6 +35,7 @@ const createOpenCodeRouteDependencies = () => ({
     providerID,
   }),
   removeProviderConfig: () => false,
+  upsertProviderConfig: (providerID) => ({ providerId: providerID, scope: 'user', path: '/tmp/config.json' }),
   refreshOpenCodeAfterConfigChange: async () => {},
 });
 
@@ -256,6 +259,57 @@ describe('backend runtime integration', () => {
       user: { exists: false, path: null },
       project: { exists: false, path: null },
       custom: { exists: false, path: null },
+    });
+  });
+
+  it('exposes runtime-managed providers in provider catalog route', async () => {
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, createOpenCodeRouteDependencies());
+
+    const server = http.createServer(app);
+    testServers.push(server);
+    const address = await listenOnEphemeralPort(server);
+    const baseUrl = `http://${address.host}:${address.port}`;
+
+    const response = await fetch(`${baseUrl}/api/provider`);
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(Array.isArray(payload.all)).toBe(true);
+    expect(payload.all.some((provider) => provider.id === 'ollama')).toBe(true);
+    expect(payload.all.some((provider) => provider.id === 'litellm')).toBe(true);
+  });
+
+  it('connects a runtime-managed provider through local connect route', async () => {
+    const dependencies = createOpenCodeRouteDependencies();
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, dependencies);
+
+    const server = http.createServer(app);
+    testServers.push(server);
+    const address = await listenOnEphemeralPort(server);
+    const baseUrl = `http://${address.host}:${address.port}`;
+
+    const response = await fetch(`${baseUrl}/api/provider/ollama/connect`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload).toEqual({
+      success: true,
+      providerId: 'ollama',
+      connected: true,
+      requiresReload: true,
+      reloadDelayMs: 250,
+      config: {
+        providerId: 'ollama',
+        scope: 'user',
+        path: '/tmp/config.json',
+      },
     });
   });
 

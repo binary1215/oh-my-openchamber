@@ -2,6 +2,8 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
   const {
     crypto,
     clientReloadDelayMs,
+    buildOpenCodeUrl,
+    getOpenCodeAuthHeaders,
     getOpenCodeResolutionSnapshot,
     formatSettingsResponse,
     readSettingsFromDisk,
@@ -12,8 +14,173 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     resolveProjectDirectory,
     getProviderSources,
     removeProviderConfig,
+    upsertProviderConfig,
     refreshOpenCodeAfterConfigChange,
   } = dependencies;
+
+  const RUNTIME_MANAGED_PROVIDERS = Object.freeze({
+    ollama: Object.freeze({
+      id: 'ollama',
+      name: 'Ollama',
+      runtimeManaged: true,
+      connectMode: 'config',
+      authMethods: [],
+      defaultConfig: Object.freeze({
+        baseURL: 'http://127.0.0.1:11434',
+      }),
+    }),
+    litellm: Object.freeze({
+      id: 'litellm',
+      name: 'LiteLLM',
+      runtimeManaged: true,
+      connectMode: 'api',
+      authMethods: Object.freeze([
+        Object.freeze({ type: 'api', label: 'Manually enter API Key' }),
+      ]),
+      defaultConfig: Object.freeze({
+        baseURL: 'http://127.0.0.1:4000',
+      }),
+    }),
+  });
+
+  const fetchUpstreamJson = async (path) => {
+    try {
+      const response = await fetch(buildOpenCodeUrl(path), {
+        headers: {
+          Accept: 'application/json',
+          ...getOpenCodeAuthHeaders(),
+        },
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      return await response.json().catch(() => null);
+    } catch {
+      return null;
+    }
+  };
+
+  const resolveProviderConnectionState = async (providerId, req) => {
+    const requestedDirectory =
+      (typeof req.get === 'function' ? req.get('x-opencode-directory') : null) ||
+      (Array.isArray(req.query?.directory) ? req.query.directory[0] : req.query?.directory) ||
+      null;
+
+    let directory = null;
+    const resolved = await resolveProjectDirectory(req);
+    if (resolved.directory) {
+      directory = resolved.directory;
+    } else if (requestedDirectory) {
+      throw new Error(resolved.error);
+    }
+
+    const sources = getProviderSources(providerId, directory).sources;
+    const { getProviderAuth } = await getAuthLibrary();
+    const auth = getProviderAuth(providerId);
+    const authExists = Boolean(auth);
+    sources.auth.exists = authExists;
+
+    return {
+      sources,
+      connected: authExists || Boolean(sources.user?.exists || sources.project?.exists || sources.custom?.exists),
+    };
+  };
+
+  app.get('/api/provider', async (req, res) => {
+    try {
+      const upstreamPayload = await fetchUpstreamJson('/provider');
+      const upstreamEntries = Array.isArray(upstreamPayload?.all)
+        ? upstreamPayload.all
+        : Array.isArray(upstreamPayload?.providers)
+          ? upstreamPayload.providers
+          : Array.isArray(upstreamPayload)
+            ? upstreamPayload
+            : [];
+
+      const merged = [...upstreamEntries];
+      const existingIds = new Set(
+        upstreamEntries
+          .map((entry) => (entry && typeof entry === 'object' ? entry.id || entry.providerID || entry.providerId : null))
+          .filter(Boolean),
+      );
+
+      for (const provider of Object.values(RUNTIME_MANAGED_PROVIDERS)) {
+        const connectionState = await resolveProviderConnectionState(provider.id, req);
+        if (!existingIds.has(provider.id)) {
+          merged.push({
+            id: provider.id,
+            name: provider.name,
+            runtimeManaged: true,
+            connectMode: provider.connectMode,
+            connected: connectionState.connected,
+          });
+        }
+      }
+
+      return res.json({ all: merged });
+    } catch (error) {
+      return res.status(500).json({ error: error.message || 'Failed to load providers' });
+    }
+  });
+
+  app.get('/api/provider/auth', async (_req, res) => {
+    try {
+      const upstreamPayload = await fetchUpstreamJson('/provider/auth');
+      const upstreamAuth = upstreamPayload && typeof upstreamPayload === 'object' ? upstreamPayload : {};
+
+      for (const provider of Object.values(RUNTIME_MANAGED_PROVIDERS)) {
+        if (!Array.isArray(upstreamAuth[provider.id])) {
+          upstreamAuth[provider.id] = [...provider.authMethods];
+        }
+      }
+
+      return res.json(upstreamAuth);
+    } catch (error) {
+      return res.status(500).json({ error: error.message || 'Failed to load provider auth methods' });
+    }
+  });
+
+  app.put('/api/provider/:providerId/connect', async (req, res) => {
+    try {
+      const { providerId } = req.params;
+      const provider = RUNTIME_MANAGED_PROVIDERS[providerId];
+      if (!provider) {
+        return res.status(404).json({ error: 'Unsupported provider' });
+      }
+
+      const scope = typeof req.body?.scope === 'string' ? req.body.scope : 'user';
+      const headerDirectory = typeof req.get === 'function' ? req.get('x-opencode-directory') : null;
+      const queryDirectory = Array.isArray(req.query?.directory)
+        ? req.query.directory[0]
+        : req.query?.directory;
+      const requestedDirectory = headerDirectory || queryDirectory || null;
+
+      let directory = null;
+      if (scope === 'project' || requestedDirectory) {
+        const resolved = await resolveProjectDirectory(req);
+        if (!resolved.directory) {
+          return res.status(400).json({ error: resolved.error });
+        }
+        directory = resolved.directory;
+      }
+
+      const result = upsertProviderConfig(providerId, directory, scope, provider.defaultConfig);
+      await refreshOpenCodeAfterConfigChange(`provider ${providerId} connected (${scope})`);
+
+      return res.json({
+        success: true,
+        providerId,
+        connected: true,
+        requiresReload: true,
+        reloadDelayMs: clientReloadDelayMs,
+        config: result,
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message || 'Failed to connect provider' });
+    }
+  });
 
   let authLibrary = null;
   const getAuthLibrary = async () => {
