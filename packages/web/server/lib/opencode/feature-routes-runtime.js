@@ -58,7 +58,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       runtimeRolloutConfig,
     } = routeDependencies;
 
-    const { getProviderSources, removeProviderConfig } = await import('./index.js');
+    const { getProviderSources, removeProviderConfig, upsertProviderConfig } = await import('./index.js');
 
     registerSettingsUtilityRoutes(app, {
       readCustomThemesFromDisk,
@@ -81,6 +81,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       resolveProjectDirectory,
       getProviderSources,
       removeProviderConfig,
+      upsertProviderConfig,
       refreshOpenCodeAfterConfigChange,
     });
 
