@@ -6,7 +6,12 @@ import { opencodeClient } from "@/lib/opencode/client";
 import { scopeMatches, subscribeToConfigChanges } from "@/lib/configSync";
 import type { ModelMetadata } from "@/types";
 import { getSafeStorage } from "./utils/safeStorage";
-import { filterVisibleAgents, mergeOmoAgents } from "./utils/agentCatalog";
+import {
+    filterVisibleAgents,
+    isPrimaryAgentMode,
+    isSelectableMainAgent,
+    mergeOmoAgents,
+} from "./utils/agentCatalog";
 import { useSessionUIStore } from "@/sync/session-ui-store";
 import { useSelectionStore } from "@/sync/selection-store";
 import { getRegisteredRuntimeAPIs } from "@/contexts/runtimeAPIRegistry";
@@ -100,8 +105,6 @@ const parseModelString = (modelString: string): { providerId: string; modelId: s
 };
 
 const normalizeProviderId = (value: string) => value?.toLowerCase?.() ?? '';
-
-const isPrimaryMode = (mode?: string) => mode === "primary" || mode === "all" || mode === undefined || mode === null;
 
 export type ProviderModel = Provider["models"][string];
 
@@ -1302,7 +1305,7 @@ export const useConfigStore = create<ConfigStore>()(
 
                             // --- Agent Selection ---
                             // Priority: settings.defaultAgent → build → first primary → first agent
-                            const primaryAgents = mergedAgents.filter((agent) => isPrimaryMode(agent.mode));
+                            const primaryAgents = mergedAgents.filter((agent) => isPrimaryAgentMode(agent.mode));
                             const buildAgent = primaryAgents.find((agent) => agent.name === "build");
                             const fallbackAgent = buildAgent || primaryAgents[0] || mergedAgents[0];
 
@@ -1314,10 +1317,10 @@ export const useConfigStore = create<ConfigStore>()(
                             // 1. Check OpenChamber settings for default agent
                             if (openChamberDefaults.defaultAgent) {
                                 const settingsAgent = mergedAgents.find((agent) => agent.name === openChamberDefaults.defaultAgent);
-                                if (settingsAgent) {
+                                if (isSelectableMainAgent(settingsAgent)) {
                                     resolvedAgent = settingsAgent;
                                 } else {
-                                    // Agent no longer exists - mark for clearing
+                                    // Agent no longer exists or is not selectable as a main chat agent
                                     invalidSettings.defaultAgent = '';
                                 }
                             }
@@ -1485,6 +1488,13 @@ export const useConfigStore = create<ConfigStore>()(
 
                 setAgent: (agentName: string | undefined) => {
                     const { agents, providers, settingsDefaultModel, settingsDefaultVariant } = get();
+                    const resolvedAgentName = (() => {
+                        if (!agentName) {
+                            return undefined;
+                        }
+                        const candidate = agents.find((agent) => agent.name === agentName);
+                        return isSelectableMainAgent(candidate) ? candidate.name : undefined;
+                    })();
 
                     set((state) => {
                         const directoryKey = state.activeDirectoryKey;
@@ -1501,11 +1511,11 @@ export const useConfigStore = create<ConfigStore>()(
 
                         const nextSnapshot: DirectoryScopedConfig = {
                             ...baseSnapshot,
-                            currentAgentName: agentName,
+                            currentAgentName: resolvedAgentName,
                         };
 
                         return {
-                            currentAgentName: agentName,
+                            currentAgentName: resolvedAgentName,
                             directoryScoped: {
                                 ...state.directoryScoped,
                                 [directoryKey]: nextSnapshot,
@@ -1513,27 +1523,27 @@ export const useConfigStore = create<ConfigStore>()(
                         };
                     });
 
-                    if (agentName) {
+                    if (resolvedAgentName) {
                         const { currentSessionId } = useSessionUIStore.getState();
                         const selState = useSelectionStore.getState();
 
                         if (currentSessionId) {
-                            selState.saveSessionAgentSelection(currentSessionId, agentName);
+                            selState.saveSessionAgentSelection(currentSessionId, resolvedAgentName);
                         }
 
                         if (currentSessionId && useSessionUIStore.getState().isOpenChamberCreatedSession(currentSessionId)) {
-                            const existingAgentModel = selState.getAgentModelForSession(currentSessionId, agentName);
+                            const existingAgentModel = selState.getAgentModelForSession(currentSessionId, resolvedAgentName);
                             if (!existingAgentModel) {
                                 useSessionUIStore.getState().initializeNewOpenChamberSession(currentSessionId, agents);
                             }
                         }
                     }
 
-                    if (agentName) {
+                    if (resolvedAgentName) {
                         const { currentSessionId } = useSessionUIStore.getState();
 
                         if (currentSessionId) {
-                            const existingAgentModel = useSelectionStore.getState().getAgentModelForSession(currentSessionId, agentName);
+                            const existingAgentModel = useSelectionStore.getState().getAgentModelForSession(currentSessionId, resolvedAgentName);
                             if (existingAgentModel) {
                                 return;
                             }
@@ -1592,7 +1602,7 @@ export const useConfigStore = create<ConfigStore>()(
                         }
 
                         // Fall back to agent's preferred model
-                        const agent = agents.find((candidate) => candidate.name === agentName);
+                        const agent = agents.find((candidate) => candidate.name === resolvedAgentName);
                         const agentModelSelection = agent?.model;
                         if (agentModelSelection?.providerID && agentModelSelection?.modelID) {
                             const { providerID, modelID } = agentModelSelection;
@@ -1644,7 +1654,10 @@ export const useConfigStore = create<ConfigStore>()(
                  },
  
                  setSettingsDefaultAgent: (agent: string | undefined) => {
-                     set({ settingsDefaultAgent: agent });
+                     const candidate = agent
+                         ? get().agents.find((entry) => entry.name === agent)
+                         : undefined;
+                     set({ settingsDefaultAgent: isSelectableMainAgent(candidate) ? candidate.name : undefined });
                  },
 
                 setSettingsAutoCreateWorktree: (enabled: boolean) => {
@@ -1859,7 +1872,8 @@ export const useConfigStore = create<ConfigStore>()(
                 getCurrentAgent: () => {
                     const { agents, currentAgentName } = get();
                     if (!currentAgentName) return undefined;
-                    return agents.find((a) => a.name === currentAgentName);
+                    const agent = agents.find((a) => a.name === currentAgentName);
+                    return isSelectableMainAgent(agent) ? agent : undefined;
                 },
                 getModelMetadata: (providerId: string, modelId: string) => {
                     const key = buildModelMetadataKey(providerId, modelId);

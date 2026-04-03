@@ -19,6 +19,69 @@ export const OMO_UI_AGENTS: readonly AgentWithExtras[] = Object.freeze([
     native: true,
   },
   {
+    name: 'Explore',
+    description: 'OMO codebase search specialist agent.',
+    mode: 'subagent',
+    prompt: '',
+    permission: [],
+    options: {},
+    native: true,
+  },
+  {
+    name: 'Hephaestus',
+    description: 'OMO autonomous deep-work execution agent.',
+    mode: 'primary',
+    prompt: '',
+    permission: [],
+    options: {},
+    native: true,
+  },
+  {
+    name: 'Librarian',
+    description: 'OMO external code and documentation research agent.',
+    mode: 'subagent',
+    prompt: '',
+    permission: [],
+    options: {},
+    native: true,
+  },
+  {
+    name: 'Metis',
+    description: 'OMO pre-planning consultant agent.',
+    mode: 'subagent',
+    prompt: '',
+    permission: [],
+    options: {},
+    native: true,
+  },
+  {
+    name: 'Momus',
+    description: 'OMO work-plan review agent.',
+    mode: 'subagent',
+    prompt: '',
+    permission: [],
+    options: {},
+    native: true,
+  },
+  {
+    name: 'Multimodal-Looker',
+    description: 'OMO media interpretation and extraction agent.',
+    mode: 'subagent',
+    prompt: '',
+    permission: [],
+    options: {},
+    native: true,
+  },
+  {
+    name: 'Oracle',
+    description: 'OMO strategic consultation and review agent.',
+    mode: 'subagent',
+    prompt: '',
+    permission: [],
+    options: {},
+    native: true,
+  },
+  {
     name: 'Prometheus',
     description: 'OMO execution planning agent for multi-step implementation.',
     mode: 'subagent',
@@ -61,6 +124,17 @@ export const mergeOmoAgents = (agents: readonly Agent[]): AgentWithExtras[] => {
   }
 
   return Array.from(byName.values()).sort((left, right) => left.name.localeCompare(right.name));
+};
+
+export const isPrimaryAgentMode = (mode?: string): boolean =>
+  mode === 'primary' || mode === 'all' || mode === undefined || mode === null;
+
+export const isSelectableMainAgent = (agent: Agent | undefined | null): agent is Agent => {
+  if (!agent) {
+    return false;
+  }
+
+  return !isAgentHidden(agent) && isPrimaryAgentMode(agent.mode);
 };
 
 export const isAgentBuiltIn = (agent: Agent): boolean => {
