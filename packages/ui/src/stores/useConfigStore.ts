@@ -103,8 +103,29 @@ const normalizeProviderId = (value: string) => value?.toLowerCase?.() ?? '';
 
 const isPrimaryMode = (mode?: string) => mode === "primary" || mode === "all" || mode === undefined || mode === null;
 
-type ProviderModel = Provider["models"][string];
-type ProviderWithModelList = Omit<Provider, "models"> & { models: ProviderModel[] };
+export type ProviderModel = Provider["models"][string];
+
+export type ProviderDiscoveryState =
+    | 'discovering'
+    | 'ready'
+    | 'empty'
+    | 'error'
+    | (string & {});
+
+export interface ProviderDiscovery {
+    state: ProviderDiscoveryState;
+    errorType?: string;
+    message?: string;
+}
+
+export type ProviderRuntimeMetadata = {
+    runtimeManaged?: boolean;
+    connectMode?: 'api' | 'config';
+    supportsBaseUrl?: boolean;
+    discovery?: ProviderDiscovery;
+};
+
+export type ProviderWithModelList = Omit<Provider, "models"> & ProviderRuntimeMetadata & { models: ProviderModel[] };
 
 type GitModelSelection = { providerId: string; modelId: string };
 
@@ -197,6 +218,32 @@ interface ModelsDevProviderEntry {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null;
+
+const asProviderRuntimeMetadata = (provider: Provider): ProviderRuntimeMetadata => {
+    const record = provider as unknown as Record<string, unknown>;
+    const runtimeManaged = record.runtimeManaged === true ? true : undefined;
+    const supportsBaseUrl = record.supportsBaseUrl === true ? true : undefined;
+    const connectModeRaw = typeof record.connectMode === 'string' ? record.connectMode : undefined;
+    const connectMode = connectModeRaw === 'api' || connectModeRaw === 'config' ? connectModeRaw : undefined;
+
+    const discoveryRaw = record.discovery;
+    const discoveryRecord = isRecord(discoveryRaw) ? discoveryRaw : null;
+    const discoveryState = discoveryRecord && typeof discoveryRecord.state === 'string' ? discoveryRecord.state : undefined;
+    const discovery: ProviderDiscovery | undefined = discoveryState
+        ? {
+              state: discoveryState as ProviderDiscoveryState,
+              errorType: typeof discoveryRecord?.errorType === 'string' ? discoveryRecord.errorType : undefined,
+              message: typeof discoveryRecord?.message === 'string' ? discoveryRecord.message : undefined,
+          }
+        : undefined;
+
+    return {
+        runtimeManaged,
+        supportsBaseUrl,
+        connectMode,
+        discovery,
+    };
+};
 
 const isStringArray = (value: unknown): value is string[] =>
     Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -768,10 +815,12 @@ export const useConfigStore = create<ConfigStore>()(
                             const defaults = apiResult?.default || {};
 
                             const processedProviders: ProviderWithModelList[] = providers.map((provider) => {
+                                const runtimeMetadata = asProviderRuntimeMetadata(provider);
                                 const modelRecord = provider.models ?? {};
                                 const models: ProviderModel[] = Object.keys(modelRecord).map((modelId) => modelRecord[modelId]);
                                 return {
                                     ...provider,
+                                    ...runtimeMetadata,
                                     models,
                                 };
                             });
