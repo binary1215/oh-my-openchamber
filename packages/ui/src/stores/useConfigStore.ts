@@ -6,7 +6,7 @@ import { opencodeClient } from "@/lib/opencode/client";
 import { scopeMatches, subscribeToConfigChanges } from "@/lib/configSync";
 import type { ModelMetadata } from "@/types";
 import { getSafeStorage } from "./utils/safeStorage";
-import { filterVisibleAgents } from "./useAgentsStore";
+import { filterVisibleAgents, mergeOmoAgents } from "./utils/agentCatalog";
 import { useSessionUIStore } from "@/sync/session-ui-store";
 import { useSelectionStore } from "@/sync/selection-store";
 import { getRegisteredRuntimeAPIs } from "@/contexts/runtimeAPIRegistry";
@@ -1179,6 +1179,7 @@ export const useConfigStore = create<ConfigStore>()(
                             ]);
 
                             const safeAgents = Array.isArray(agents) ? agents : [];
+                            const mergedAgents = mergeOmoAgents(safeAgents);
 
                             const providers = get().activeDirectoryKey === directoryKey
                                 ? get().providers
@@ -1217,7 +1218,7 @@ export const useConfigStore = create<ConfigStore>()(
                                 const nextSnapshot: DirectoryScopedConfig = {
                                     ...baseSnapshot,
                                     providers,
-                                    agents: safeAgents,
+                                    agents: mergedAgents,
                                 };
 
                                 const nextState: Partial<ConfigStore> = {
@@ -1234,7 +1235,7 @@ export const useConfigStore = create<ConfigStore>()(
                                 };
 
                                 if (state.activeDirectoryKey === directoryKey) {
-                                    nextState.agents = safeAgents;
+                                    nextState.agents = mergedAgents;
                                 }
 
                                 return nextState;
@@ -1254,7 +1255,7 @@ export const useConfigStore = create<ConfigStore>()(
                                 });
                             }
 
-                            if (safeAgents.length === 0) {
+                            if (mergedAgents.length === 0) {
                                 set((state) => {
                                     const baseSnapshot: DirectoryScopedConfig = state.directoryScoped[directoryKey] ?? {
                                         providers,
@@ -1301,9 +1302,9 @@ export const useConfigStore = create<ConfigStore>()(
 
                             // --- Agent Selection ---
                             // Priority: settings.defaultAgent → build → first primary → first agent
-                            const primaryAgents = safeAgents.filter((agent) => isPrimaryMode(agent.mode));
+                            const primaryAgents = mergedAgents.filter((agent) => isPrimaryMode(agent.mode));
                             const buildAgent = primaryAgents.find((agent) => agent.name === "build");
-                            const fallbackAgent = buildAgent || primaryAgents[0] || safeAgents[0];
+                            const fallbackAgent = buildAgent || primaryAgents[0] || mergedAgents[0];
 
                             let resolvedAgent: Agent = fallbackAgent;
 
@@ -1312,7 +1313,7 @@ export const useConfigStore = create<ConfigStore>()(
 
                             // 1. Check OpenChamber settings for default agent
                             if (openChamberDefaults.defaultAgent) {
-                                const settingsAgent = safeAgents.find((agent) => agent.name === openChamberDefaults.defaultAgent);
+                                const settingsAgent = mergedAgents.find((agent) => agent.name === openChamberDefaults.defaultAgent);
                                 if (settingsAgent) {
                                     resolvedAgent = settingsAgent;
                                 } else {
@@ -1378,7 +1379,7 @@ export const useConfigStore = create<ConfigStore>()(
                             set((state) => {
                                 const baseSnapshot: DirectoryScopedConfig = state.directoryScoped[directoryKey] ?? {
                                     providers,
-                                    agents: safeAgents,
+                                    agents: mergedAgents,
                                     currentProviderId: "",
                                     currentModelId: "",
                                     currentAgentName: undefined,
@@ -1390,7 +1391,7 @@ export const useConfigStore = create<ConfigStore>()(
                                 const nextSnapshot: DirectoryScopedConfig = {
                                     ...baseSnapshot,
                                     providers,
-                                    agents: safeAgents,
+                                    agents: mergedAgents,
                                     currentAgentName: resolvedAgent.name,
                                     currentProviderId: resolvedProviderId ?? baseSnapshot.currentProviderId,
                                     currentModelId: resolvedModelId ?? baseSnapshot.currentModelId,

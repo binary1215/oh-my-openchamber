@@ -15,6 +15,14 @@ import { useCommandsStore } from "@/stores/useCommandsStore";
 import { useProjectsStore } from "@/stores/useProjectsStore";
 import { useSkillsCatalogStore } from "@/stores/useSkillsCatalogStore";
 import { useSkillsStore } from "@/stores/useSkillsStore";
+import {
+  filterVisibleAgents,
+  mergeOmoAgents,
+} from './utils/agentCatalog';
+import type { AgentWithExtras } from './utils/agentCatalog';
+
+export type { AgentWithExtras } from './utils/agentCatalog';
+export { filterVisibleAgents, isAgentBuiltIn, isAgentHidden } from './utils/agentCatalog';
 
 // Note: useDirectoryStore cannot be imported at top level to avoid circular dependency
 // useDirectoryStore -> useAgentsStore (for refreshAfterOpenCodeRestart)
@@ -101,71 +109,6 @@ export interface AgentConfig {
   scope?: AgentScope;
 }
 
-// Extended Agent type for API properties not in SDK types
-export type AgentWithExtras = Agent & {
-  native?: boolean;
-  hidden?: boolean;
-  options?: { hidden?: boolean };
-  scope?: AgentScope;
-  /** Subfolder name parsed from file path, e.g. "business", "development" */
-  group?: string;
-};
-
-const OMO_UI_AGENTS: readonly AgentWithExtras[] = Object.freeze([
-  {
-    name: 'Atlas',
-    description: 'OMO planning and orchestration agent.',
-    mode: 'primary',
-    prompt: '',
-    permission: [],
-    options: {},
-    native: true,
-  },
-  {
-    name: 'Prometheus',
-    description: 'OMO execution planning agent for multi-step implementation.',
-    mode: 'subagent',
-    prompt: '',
-    permission: [],
-    options: {},
-    native: true,
-  },
-  {
-    name: 'Sisyphus',
-    description: 'OMO ultrawork execution agent.',
-    mode: 'primary',
-    prompt: '',
-    permission: [],
-    options: {},
-    native: true,
-  },
-  {
-    name: 'Sisyphus-Junior',
-    description: 'OMO delegated subagent executor.',
-    mode: 'subagent',
-    prompt: '',
-    permission: [],
-    options: {},
-    native: true,
-  },
-]);
-
-const mergeOmoAgents = (agents: readonly AgentWithExtras[]): AgentWithExtras[] => {
-  const byName = new Map<string, AgentWithExtras>();
-
-  for (const agent of agents) {
-    byName.set(agent.name, agent);
-  }
-
-  for (const agent of OMO_UI_AGENTS) {
-    if (!byName.has(agent.name)) {
-      byName.set(agent.name, { ...agent });
-    }
-  }
-
-  return Array.from(byName.values()).sort((left, right) => left.name.localeCompare(right.name));
-};
-
 /** Parse the subfolder group name from an agent file path.
  *  e.g. "~/.config/opencode/agents/business/ceo.md" → "business"
  *  e.g. "~/.config/opencode/agents/ceo.md"          → undefined
@@ -180,23 +123,6 @@ function parseAgentGroup(path: string | null | undefined): string | undefined {
   // parts[0] = group, parts[1] = filename; need at least 2 parts
   return parts.length > 1 ? parts[0] : undefined;
 }
-
-// Helper to check if agent is built-in (handles both SDK 'builtIn' and API 'native')
-export const isAgentBuiltIn = (agent: Agent): boolean => {
-  const extended = agent as AgentWithExtras & { builtIn?: boolean };
-  return extended.native === true || extended.builtIn === true;
-};
-
-// Helper to check if agent is hidden (internal agents like title, compaction, summary)
-// Checks both top-level hidden and options.hidden (OpenCode API inconsistency workaround)
-export const isAgentHidden = (agent: Agent): boolean => {
-  const extended = agent as AgentWithExtras;
-  return extended.hidden === true || extended.options?.hidden === true;
-};
-
-// Helper to filter only visible (non-hidden) agents
-export const filterVisibleAgents = (agents: Agent[]): Agent[] =>
-  agents.filter((agent) => !isAgentHidden(agent));
 
 const CONFIG_EVENT_SOURCE = "useAgentsStore";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
