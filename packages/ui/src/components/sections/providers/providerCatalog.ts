@@ -14,6 +14,7 @@ export interface ProviderOption {
   connected?: boolean;
   runtimeManaged?: boolean;
   connectMode?: 'api' | 'config';
+  supportsBaseUrl?: boolean;
 }
 
 export interface ProviderSourceInfo {
@@ -75,6 +76,7 @@ export const normalizeProviderEntry = (entry: unknown): ProviderOption | null =>
   const connected = typeof entry.connected === 'boolean' ? entry.connected : undefined;
   const runtimeManaged = entry.runtimeManaged === true;
   const connectMode = entry.connectMode === 'config' ? 'config' : entry.connectMode === 'api' ? 'api' : undefined;
+  const supportsBaseUrl = entry.supportsBaseUrl === true;
 
   return {
     id: idCandidate,
@@ -82,6 +84,7 @@ export const normalizeProviderEntry = (entry: unknown): ProviderOption | null =>
     connected,
     runtimeManaged,
     connectMode,
+    supportsBaseUrl,
   };
 };
 

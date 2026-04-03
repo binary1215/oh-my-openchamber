@@ -65,6 +65,24 @@ function getProviderAuth(providerId) {
   return auth[providerId] || null;
 }
 
+function upsertProviderAuth(providerId, value) {
+  if (!providerId || typeof providerId !== 'string') {
+    throw new Error('Provider ID is required');
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Provider auth payload must be an object');
+  }
+
+  const auth = readAuthFile();
+  auth[providerId] = {
+    ...(auth[providerId] && typeof auth[providerId] === 'object' ? auth[providerId] : {}),
+    ...value,
+  };
+  writeAuthFile(auth);
+  return auth[providerId];
+}
+
 function listProviderAuths() {
   const auth = readAuthFile();
   return Object.keys(auth);
@@ -75,6 +93,7 @@ export {
   writeAuthFile,
   removeProviderAuth,
   getProviderAuth,
+  upsertProviderAuth,
   listProviderAuths,
   AUTH_FILE,
   OPENCODE_DATA_DIR

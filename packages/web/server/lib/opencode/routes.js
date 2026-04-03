@@ -23,23 +23,21 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       id: 'ollama',
       name: 'Ollama',
       runtimeManaged: true,
-      connectMode: 'config',
-      authMethods: [],
-      defaultConfig: Object.freeze({
-        baseURL: 'http://127.0.0.1:11434',
-      }),
+      connectMode: 'api',
+      supportsBaseUrl: true,
+      authMethods: Object.freeze([
+        Object.freeze({ type: 'api', label: 'Manually enter endpoint and API Key' }),
+      ]),
     }),
     litellm: Object.freeze({
       id: 'litellm',
       name: 'LiteLLM',
       runtimeManaged: true,
       connectMode: 'api',
+      supportsBaseUrl: true,
       authMethods: Object.freeze([
-        Object.freeze({ type: 'api', label: 'Manually enter API Key' }),
+        Object.freeze({ type: 'api', label: 'Manually enter endpoint and API Key' }),
       ]),
-      defaultConfig: Object.freeze({
-        baseURL: 'http://127.0.0.1:4000',
-      }),
     }),
   });
 
@@ -114,6 +112,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
             name: provider.name,
             runtimeManaged: true,
             connectMode: provider.connectMode,
+            supportsBaseUrl: provider.supportsBaseUrl === true,
             connected: connectionState.connected,
           });
         }
@@ -189,6 +188,46 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     }
     return authLibrary;
   };
+
+  app.put('/api/auth/:providerId', async (req, res) => {
+    try {
+      const { providerId } = req.params;
+      if (!providerId) {
+        return res.status(400).json({ error: 'Provider ID is required' });
+      }
+
+      const { upsertProviderAuth } = await getAuthLibrary();
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const type = typeof body.type === 'string' ? body.type : 'api';
+      const apiKey = typeof body.key === 'string' ? body.key.trim() : '';
+      const baseURL = typeof body.baseURL === 'string' ? body.baseURL.trim() : '';
+
+      if (type !== 'api') {
+        return res.status(400).json({ error: 'Unsupported auth type' });
+      }
+
+      if (!apiKey && !baseURL) {
+        return res.status(400).json({ error: 'API key or base URL is required' });
+      }
+
+      const nextAuth = {};
+      if (apiKey) nextAuth.apiKey = apiKey;
+      if (baseURL) nextAuth.baseURL = baseURL;
+
+      const saved = upsertProviderAuth(providerId, nextAuth);
+      await refreshOpenCodeAfterConfigChange(`provider ${providerId} auth saved`);
+
+      return res.json({
+        success: true,
+        providerId,
+        auth: saved,
+        requiresReload: true,
+        reloadDelayMs: clientReloadDelayMs,
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message || 'Failed to save provider auth' });
+    }
+  });
 
   app.get('/api/config/settings', async (_req, res) => {
     try {

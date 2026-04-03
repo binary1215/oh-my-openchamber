@@ -313,6 +313,54 @@ describe('backend runtime integration', () => {
     });
   });
 
+  it('saves provider auth with baseURL and apiKey through auth route', async () => {
+    const dependencies = {
+      ...createOpenCodeRouteDependencies(),
+    };
+
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, dependencies);
+
+    const authModule = await import('../opencode/auth.js');
+    const authFilePath = authModule.AUTH_FILE;
+    let backup = null;
+
+    try {
+      backup = await fsPromises.readFile(authFilePath, 'utf8');
+    } catch {
+      backup = null;
+    }
+
+    try {
+      const server = http.createServer(app);
+      testServers.push(server);
+      const address = await listenOnEphemeralPort(server);
+      const baseUrl = `http://${address.host}:${address.port}`;
+
+      const response = await fetch(`${baseUrl}/api/auth/ollama`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'api', key: 'secret', baseURL: 'http://127.0.0.1:11434' }),
+      });
+
+      expect(response.status).toBe(200);
+      const payload = await response.json();
+      expect(payload.success).toBe(true);
+      const written = JSON.parse(await fsPromises.readFile(authFilePath, 'utf8'));
+      expect(written.ollama).toEqual({
+        apiKey: 'secret',
+        baseURL: 'http://127.0.0.1:11434',
+      });
+    } finally {
+      if (backup === null) {
+        await fsPromises.rm(authFilePath, { force: true });
+      } else {
+        await fsPromises.writeFile(authFilePath, backup, 'utf8');
+      }
+    }
+  });
+
   it('keeps existing config settings route response shape intact', async () => {
     const baseDirectory = await createTempDirectory();
     const runtimeBackend = createRuntimeBackend({ fsPromises, path, baseDirectory });

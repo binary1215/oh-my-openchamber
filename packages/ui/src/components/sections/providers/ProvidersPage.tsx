@@ -28,6 +28,7 @@ type DisplayProvider = {
   models?: Array<{ id?: string; name?: string }>;
   runtimeManaged?: boolean;
   connectMode?: 'api' | 'config';
+  supportsBaseUrl?: boolean;
 };
 
 const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
@@ -63,6 +64,7 @@ export const ProvidersPage: React.FC = () => {
   const [authMethodsByProvider, setAuthMethodsByProvider] = React.useState<Record<string, AuthMethod[]>>({});
   const [authLoading, setAuthLoading] = React.useState(false);
   const [apiKeyInputs, setApiKeyInputs] = React.useState<Record<string, string>>({});
+  const [baseUrlInputs, setBaseUrlInputs] = React.useState<Record<string, string>>({});
   const [authBusyKey, setAuthBusyKey] = React.useState<string | null>(null);
   const [modelQuery, setModelQuery] = React.useState('');
   const [pendingOAuth, setPendingOAuth] = React.useState<{ providerId: string; methodIndex: number } | null>(null);
@@ -95,6 +97,7 @@ export const ProvidersPage: React.FC = () => {
         models: [],
         runtimeManaged: option.runtimeManaged,
         connectMode: option.connectMode,
+        supportsBaseUrl: option.supportsBaseUrl,
       });
     }
 
@@ -274,8 +277,11 @@ export const ProvidersPage: React.FC = () => {
 
   const handleSaveApiKey = async (providerId: string) => {
     const apiKey = apiKeyInputs[providerId]?.trim() ?? '';
-    if (!apiKey) {
-      toast.error('API key is required');
+    const providerOption = availableProviders.find((provider) => provider.id === providerId);
+    const baseURL = baseUrlInputs[providerId]?.trim() ?? '';
+
+    if (!apiKey && !baseURL) {
+      toast.error('API key or endpoint is required');
       return;
     }
 
@@ -283,11 +289,11 @@ export const ProvidersPage: React.FC = () => {
     setAuthBusyKey(busyKey);
 
     try {
-      const response = await fetch(`/api/auth/${encodeURIComponent(providerId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'api', key: apiKey }),
-      });
+        const response = await fetch(`/api/auth/${encodeURIComponent(providerId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'api', key: apiKey, baseURL }),
+        });
 
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
@@ -295,13 +301,9 @@ export const ProvidersPage: React.FC = () => {
         throw new Error(message);
       }
 
-      const providerOption = availableProviders.find((provider) => provider.id === providerId);
-      if (providerOption?.runtimeManaged) {
-        await connectRuntimeManagedProvider(providerId);
-      }
-
       toast.success('API key saved');
       setApiKeyInputs((prev) => ({ ...prev, [providerId]: '' }));
+      setBaseUrlInputs((prev) => ({ ...prev, [providerId]: '' }));
       await reloadOpenCodeConfiguration({ scopes: ["providers"], mode: "active" });
       setSelectedProvider(providerId);
     } catch (error) {
@@ -623,6 +625,25 @@ export const ProvidersPage: React.FC = () => {
 
                     return (
                       <div className="py-1.5">
+                      {candidateOption?.supportsBaseUrl ? (
+                        <>
+                          <label className="typography-ui-label text-foreground flex items-center gap-1.5 mb-1.5">
+                            Host / Endpoint
+                          </label>
+                          <Input
+                            type="text"
+                            value={baseUrlInputs[candidateProviderId] ?? ''}
+                            onChange={(event) =>
+                              setBaseUrlInputs((prev) => ({
+                                ...prev,
+                                [candidateProviderId]: event.target.value,
+                              }))
+                            }
+                            placeholder={candidateProviderId === 'ollama' ? 'http://127.0.0.1:11434' : 'http://127.0.0.1:4000'}
+                            className="mb-2 font-mono text-xs"
+                          />
+                        </>
+                      ) : null}
                       <label className="typography-ui-label text-foreground flex items-center gap-1.5">
                         API Key
                         <Tooltip delayDuration={1000}>
@@ -835,6 +856,25 @@ export const ProvidersPage: React.FC = () => {
                   </div>
                 ) : (
                 <div className="py-1.5">
+                  {selectedProvider.supportsBaseUrl ? (
+                    <>
+                      <label className="typography-ui-label text-foreground flex items-center gap-1.5 mb-1.5">
+                        Host / Endpoint
+                      </label>
+                      <Input
+                        type="text"
+                        value={baseUrlInputs[selectedProvider.id] ?? ''}
+                        onChange={(event) =>
+                          setBaseUrlInputs((prev) => ({
+                            ...prev,
+                            [selectedProvider.id]: event.target.value,
+                          }))
+                        }
+                        placeholder={selectedProvider.id === 'ollama' ? 'http://127.0.0.1:11434' : 'http://127.0.0.1:4000'}
+                        className="mb-2 font-mono text-xs"
+                      />
+                    </>
+                  ) : null}
                   <label className="typography-ui-label text-foreground flex items-center gap-1.5">
                     API Key
                     <Tooltip delayDuration={1000}>
