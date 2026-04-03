@@ -77,6 +77,20 @@ const closeServer = async (server) =>
     });
   });
 
+const waitFor = async (predicate, timeoutMs = 3_000, intervalMs = 50) => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = await predicate();
+    if (result) {
+      return result;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error('Timed out waiting for condition');
+};
+
 const readSseUntilMarkers = async (response, markers) => {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -352,6 +366,296 @@ describe('backend runtime integration', () => {
         apiKey: 'secret',
         baseURL: 'http://127.0.0.1:11434',
       });
+    } finally {
+      if (backup === null) {
+        await fsPromises.rm(authFilePath, { force: true });
+      } else {
+        await fsPromises.writeFile(authFilePath, backup, 'utf8');
+      }
+    }
+  });
+
+  it('exposes canonical provider models for runtime-managed providers without dropping existing providers', async () => {
+    const upstreamApp = express();
+    upstreamApp.get('/config/providers', (_req, res) => {
+      res.json({
+        providers: [
+          {
+            id: 'openai',
+            name: 'OpenAI',
+            models: {
+              'gpt-4.1-mini': { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
+            },
+          },
+        ],
+        default: { chat: 'openai/gpt-4.1-mini' },
+      });
+    });
+
+    const upstreamServer = http.createServer(upstreamApp);
+    testServers.push(upstreamServer);
+    const upstreamAddress = await listenOnEphemeralPort(upstreamServer);
+    const upstreamBaseUrl = `http://${upstreamAddress.host}:${upstreamAddress.port}`;
+
+    const providerApp = express();
+    providerApp.get('/models', (req, res) => {
+      if (req.headers.authorization !== 'Bearer secret') {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      return res.json({
+        data: [
+          { id: 'litellm/claude-3.7', name: 'Claude 3.7 Sonnet' },
+        ],
+      });
+    });
+
+    const providerServer = http.createServer(providerApp);
+    testServers.push(providerServer);
+    const providerAddress = await listenOnEphemeralPort(providerServer);
+    const providerBaseUrl = `http://${providerAddress.host}:${providerAddress.port}`;
+
+    const dependencies = {
+      ...createOpenCodeRouteDependencies(),
+      buildOpenCodeUrl: (routePath) => `${upstreamBaseUrl}${routePath}`,
+    };
+
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, dependencies);
+
+    const authModule = await import('../opencode/auth.js');
+    const authFilePath = authModule.AUTH_FILE;
+    let backup = null;
+
+    try {
+      backup = await fsPromises.readFile(authFilePath, 'utf8');
+    } catch {
+      backup = null;
+    }
+
+    try {
+      await fsPromises.mkdir(path.dirname(authFilePath), { recursive: true });
+      await fsPromises.writeFile(authFilePath, JSON.stringify({
+        litellm: {
+          apiKey: 'secret',
+          baseURL: providerBaseUrl,
+        },
+      }), 'utf8');
+
+      const server = http.createServer(app);
+      testServers.push(server);
+      const address = await listenOnEphemeralPort(server);
+      const baseUrl = `http://${address.host}:${address.port}`;
+
+      const firstResponse = await fetch(`${baseUrl}/api/config/providers`);
+      expect(firstResponse.status).toBe(200);
+      const firstPayload = await firstResponse.json();
+      const firstLiteLlm = firstPayload.providers.find((provider) => provider.id === 'litellm');
+      expect(firstPayload.providers.some((provider) => provider.id === 'openai')).toBe(true);
+      expect(firstLiteLlm.discovery.state).toBe('discovering');
+
+      const finalLiteLlm = await waitFor(async () => {
+        const response = await fetch(`${baseUrl}/api/config/providers`);
+        const payload = await response.json();
+        const provider = payload.providers.find((entry) => entry.id === 'litellm');
+        return provider?.discovery?.state === 'ready' ? provider : null;
+      });
+
+      expect(finalLiteLlm.models['litellm/claude-3.7']).toEqual({
+        id: 'litellm/claude-3.7',
+        providerID: 'litellm',
+        name: 'Claude 3.7 Sonnet',
+        family: 'external',
+        api: {
+          id: 'litellm/claude-3.7',
+          npm: '@ai-sdk/openai-compatible',
+        },
+        status: 'active',
+        headers: {},
+        options: {},
+        cost: {
+          input: 0,
+          output: 0,
+          cache: {
+            read: 0,
+            write: 0,
+          },
+        },
+        limit: {
+          context: 0,
+          output: 0,
+        },
+        capabilities: {
+          temperature: true,
+          reasoning: false,
+          attachment: false,
+          toolcall: true,
+          input: {
+            text: true,
+            audio: false,
+            image: false,
+            video: false,
+            pdf: false,
+          },
+          output: {
+            text: true,
+            audio: false,
+            image: false,
+            video: false,
+            pdf: false,
+          },
+          interleaved: false,
+        },
+        variants: {},
+      });
+    } finally {
+      if (backup === null) {
+        await fsPromises.rm(authFilePath, { force: true });
+      } else {
+        await fsPromises.writeFile(authFilePath, backup, 'utf8');
+      }
+    }
+  });
+
+  it('classifies empty runtime-managed discovery responses as empty', async () => {
+    const upstreamApp = express();
+    upstreamApp.get('/config/providers', (_req, res) => {
+      res.json({ providers: [], default: {} });
+    });
+
+    const upstreamServer = http.createServer(upstreamApp);
+    testServers.push(upstreamServer);
+    const upstreamAddress = await listenOnEphemeralPort(upstreamServer);
+    const upstreamBaseUrl = `http://${upstreamAddress.host}:${upstreamAddress.port}`;
+
+    const providerApp = express();
+    providerApp.get('/api/tags', (_req, res) => {
+      res.json({ models: [] });
+    });
+
+    const providerServer = http.createServer(providerApp);
+    testServers.push(providerServer);
+    const providerAddress = await listenOnEphemeralPort(providerServer);
+    const providerBaseUrl = `http://${providerAddress.host}:${providerAddress.port}`;
+
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, {
+      ...createOpenCodeRouteDependencies(),
+      buildOpenCodeUrl: (routePath) => `${upstreamBaseUrl}${routePath}`,
+    });
+
+    const authModule = await import('../opencode/auth.js');
+    const authFilePath = authModule.AUTH_FILE;
+    let backup = null;
+
+    try {
+      backup = await fsPromises.readFile(authFilePath, 'utf8');
+    } catch {
+      backup = null;
+    }
+
+    try {
+      await fsPromises.mkdir(path.dirname(authFilePath), { recursive: true });
+      await fsPromises.writeFile(authFilePath, JSON.stringify({
+        ollama: {
+          baseURL: providerBaseUrl,
+        },
+      }), 'utf8');
+
+      const server = http.createServer(app);
+      testServers.push(server);
+      const address = await listenOnEphemeralPort(server);
+      const baseUrl = `http://${address.host}:${address.port}`;
+
+      const provider = await waitFor(async () => {
+        const response = await fetch(`${baseUrl}/api/config/providers`);
+        const payload = await response.json();
+        const entry = payload.providers.find((candidate) => candidate.id === 'ollama');
+        return entry?.discovery?.state === 'empty' ? entry : null;
+      });
+
+      expect(provider.discovery).toEqual({
+        state: 'empty',
+        errorType: null,
+        message: null,
+      });
+      expect(provider.models).toEqual({});
+    } finally {
+      if (backup === null) {
+        await fsPromises.rm(authFilePath, { force: true });
+      } else {
+        await fsPromises.writeFile(authFilePath, backup, 'utf8');
+      }
+    }
+  });
+
+  it('classifies auth failures for runtime-managed discovery explicitly', async () => {
+    const upstreamApp = express();
+    upstreamApp.get('/config/providers', (_req, res) => {
+      res.json({ providers: [], default: {} });
+    });
+
+    const upstreamServer = http.createServer(upstreamApp);
+    testServers.push(upstreamServer);
+    const upstreamAddress = await listenOnEphemeralPort(upstreamServer);
+    const upstreamBaseUrl = `http://${upstreamAddress.host}:${upstreamAddress.port}`;
+
+    const providerApp = express();
+    providerApp.get('/models', (_req, res) => {
+      res.status(401).json({ error: 'Unauthorized' });
+    });
+
+    const providerServer = http.createServer(providerApp);
+    testServers.push(providerServer);
+    const providerAddress = await listenOnEphemeralPort(providerServer);
+    const providerBaseUrl = `http://${providerAddress.host}:${providerAddress.port}`;
+
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, {
+      ...createOpenCodeRouteDependencies(),
+      buildOpenCodeUrl: (routePath) => `${upstreamBaseUrl}${routePath}`,
+    });
+
+    const authModule = await import('../opencode/auth.js');
+    const authFilePath = authModule.AUTH_FILE;
+    let backup = null;
+
+    try {
+      backup = await fsPromises.readFile(authFilePath, 'utf8');
+    } catch {
+      backup = null;
+    }
+
+    try {
+      await fsPromises.mkdir(path.dirname(authFilePath), { recursive: true });
+      await fsPromises.writeFile(authFilePath, JSON.stringify({
+        litellm: {
+          apiKey: 'wrong-secret',
+          baseURL: providerBaseUrl,
+        },
+      }), 'utf8');
+
+      const server = http.createServer(app);
+      testServers.push(server);
+      const address = await listenOnEphemeralPort(server);
+      const baseUrl = `http://${address.host}:${address.port}`;
+
+      const provider = await waitFor(async () => {
+        const response = await fetch(`${baseUrl}/api/config/providers`);
+        const payload = await response.json();
+        const entry = payload.providers.find((candidate) => candidate.id === 'litellm');
+        return entry?.discovery?.state === 'error' ? entry : null;
+      });
+
+      expect(provider.discovery).toEqual({
+        state: 'error',
+        errorType: 'auth',
+        message: 'Unauthorized',
+      });
+      expect(provider.models).toEqual({});
     } finally {
       if (backup === null) {
         await fsPromises.rm(authFilePath, { force: true });

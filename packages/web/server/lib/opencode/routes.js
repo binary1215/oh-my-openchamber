@@ -1,3 +1,6 @@
+import { invalidateProviderDiscovery, resolveRuntimeManagedDiscovery } from './provider-discovery.js';
+import { RUNTIME_MANAGED_PROVIDERS } from './providers.js';
+
 export const registerOpenCodeRoutes = (app, dependencies) => {
   const {
     crypto,
@@ -18,28 +21,127 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     refreshOpenCodeAfterConfigChange,
   } = dependencies;
 
-  const RUNTIME_MANAGED_PROVIDERS = Object.freeze({
-    ollama: Object.freeze({
-      id: 'ollama',
-      name: 'Ollama',
-      runtimeManaged: true,
-      connectMode: 'api',
-      supportsBaseUrl: true,
-      authMethods: Object.freeze([
-        Object.freeze({ type: 'api', label: 'Manually enter endpoint and API Key' }),
+  const runtimeManagedProviderCatalog = Object.freeze(
+    Object.fromEntries(
+      Object.values(RUNTIME_MANAGED_PROVIDERS).map((provider) => [
+        provider.id,
+        Object.freeze({
+          ...provider,
+          runtimeManaged: true,
+          authMethods: Object.freeze([
+            Object.freeze({ type: 'api', label: 'Manually enter endpoint and API Key' }),
+          ]),
+        }),
       ]),
-    }),
-    litellm: Object.freeze({
-      id: 'litellm',
-      name: 'LiteLLM',
-      runtimeManaged: true,
-      connectMode: 'api',
-      supportsBaseUrl: true,
-      authMethods: Object.freeze([
-        Object.freeze({ type: 'api', label: 'Manually enter endpoint and API Key' }),
-      ]),
-    }),
+    ),
+  );
+
+  const normalizeProviderId = (entry) =>
+    entry && typeof entry === 'object' ? entry.id || entry.providerID || entry.providerId : null;
+
+  const createProviderModelsRecord = (provider) => {
+    if (!provider || typeof provider !== 'object' || !provider.models || typeof provider.models !== 'object') {
+      return Object.create(null);
+    }
+
+    const models = Object.create(null);
+    for (const [modelId, model] of Object.entries(provider.models)) {
+      if (!modelId || !model || typeof model !== 'object') {
+        continue;
+      }
+
+      models[modelId] = {
+        ...model,
+        id: typeof model.id === 'string' && model.id ? model.id : modelId,
+        name: typeof model.name === 'string' && model.name ? model.name : modelId,
+      };
+    }
+
+    return models;
+  };
+
+  const createDiscoveryMetadata = ({ state, errorType = null, message = null }) => ({
+    state,
+    errorType,
+    message,
   });
+
+  const inferDiscoveryMetadataFromModels = (provider) => {
+    const models = createProviderModelsRecord(provider);
+    return {
+      models,
+      discovery: createDiscoveryMetadata({
+        state: Object.keys(models).length > 0 ? 'ready' : 'empty',
+      }),
+    };
+  };
+
+  const buildCanonicalProvidersPayload = async (req) => {
+    const upstreamPayload = await fetchUpstreamJson('/config/providers');
+    const upstreamProviders = Array.isArray(upstreamPayload?.providers) ? upstreamPayload.providers : [];
+    const upstreamDefaults = upstreamPayload?.default && typeof upstreamPayload.default === 'object'
+      ? upstreamPayload.default
+      : {};
+
+    const providerMap = new Map(
+      upstreamProviders
+        .filter((provider) => provider && typeof provider === 'object')
+        .map((provider) => [normalizeProviderId(provider), provider])
+        .filter(([providerId]) => Boolean(providerId)),
+    );
+
+    for (const provider of Object.values(runtimeManagedProviderCatalog)) {
+      const connectionState = await resolveProviderConnectionState(provider.id, req);
+      const existingProvider = providerMap.get(provider.id);
+      const baseProvider = existingProvider && typeof existingProvider === 'object'
+        ? { ...existingProvider }
+        : {
+            id: provider.id,
+            name: provider.name,
+            models: Object.create(null),
+          };
+
+      if (!connectionState.connected && !existingProvider) {
+        continue;
+      }
+
+      const discovery = resolveRuntimeManagedDiscovery({
+        providerId: provider.id,
+        directory: connectionState.directory,
+        auth: connectionState.auth,
+        sources: connectionState.sources,
+      });
+
+      providerMap.set(provider.id, {
+        ...baseProvider,
+        id: provider.id,
+        name: baseProvider.name || provider.name,
+        runtimeManaged: true,
+        connectMode: provider.connectMode,
+        supportsBaseUrl: provider.supportsBaseUrl === true,
+        models: discovery.models,
+        discovery: createDiscoveryMetadata(discovery),
+      });
+    }
+
+    const providers = Array.from(providerMap.values()).map((provider) => {
+      if (provider?.runtimeManaged === true) {
+        return provider;
+      }
+
+      const normalized = inferDiscoveryMetadataFromModels(provider);
+      return {
+        ...provider,
+        models: normalized.models,
+        discovery: normalized.discovery,
+      };
+    });
+
+    return {
+      providers,
+      default: upstreamDefaults,
+    };
+  };
 
   const fetchUpstreamJson = async (path) => {
     try {
@@ -81,10 +183,20 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     sources.auth.exists = authExists;
 
     return {
+      directory,
+      auth,
       sources,
       connected: authExists || Boolean(sources.user?.exists || sources.project?.exists || sources.custom?.exists),
     };
   };
+
+  app.get('/api/config/providers', async (req, res) => {
+    try {
+      return res.json(await buildCanonicalProvidersPayload(req));
+    } catch (error) {
+      return res.status(500).json({ error: error.message || 'Failed to load canonical providers' });
+    }
+  });
 
   app.get('/api/provider', async (req, res) => {
     try {
@@ -104,9 +216,17 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
           .filter(Boolean),
       );
 
-      for (const provider of Object.values(RUNTIME_MANAGED_PROVIDERS)) {
+      const canonicalPayload = await buildCanonicalProvidersPayload(req);
+      const canonicalById = new Map(
+        canonicalPayload.providers
+          .map((provider) => [provider?.id, provider])
+          .filter(([providerId]) => Boolean(providerId)),
+      );
+
+      for (const provider of Object.values(runtimeManagedProviderCatalog)) {
         const connectionState = await resolveProviderConnectionState(provider.id, req);
         if (!existingIds.has(provider.id)) {
+          const canonicalProvider = canonicalById.get(provider.id);
           merged.push({
             id: provider.id,
             name: provider.name,
@@ -114,6 +234,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
             connectMode: provider.connectMode,
             supportsBaseUrl: provider.supportsBaseUrl === true,
             connected: connectionState.connected,
+            discovery: canonicalProvider?.discovery,
           });
         }
       }
@@ -129,7 +250,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       const upstreamPayload = await fetchUpstreamJson('/provider/auth');
       const upstreamAuth = upstreamPayload && typeof upstreamPayload === 'object' ? upstreamPayload : {};
 
-      for (const provider of Object.values(RUNTIME_MANAGED_PROVIDERS)) {
+      for (const provider of Object.values(runtimeManagedProviderCatalog)) {
         if (!Array.isArray(upstreamAuth[provider.id])) {
           upstreamAuth[provider.id] = [...provider.authMethods];
         }
@@ -144,7 +265,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
   app.put('/api/provider/:providerId/connect', async (req, res) => {
     try {
       const { providerId } = req.params;
-      const provider = RUNTIME_MANAGED_PROVIDERS[providerId];
+      const provider = runtimeManagedProviderCatalog[providerId];
       if (!provider) {
         return res.status(404).json({ error: 'Unsupported provider' });
       }
@@ -166,6 +287,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       }
 
       const result = upsertProviderConfig(providerId, directory, scope, provider.defaultConfig);
+      invalidateProviderDiscovery(providerId);
       await refreshOpenCodeAfterConfigChange(`provider ${providerId} connected (${scope})`);
 
       return res.json({
@@ -214,7 +336,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       if (apiKey) nextAuth.apiKey = apiKey;
       if (baseURL) nextAuth.baseURL = baseURL;
 
-      if (RUNTIME_MANAGED_PROVIDERS[providerId]) {
+      if (runtimeManagedProviderCatalog[providerId]) {
         try {
           removeProviderConfig(providerId, null, 'user');
         } catch {
@@ -228,6 +350,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       }
 
       const saved = upsertProviderAuth(providerId, nextAuth);
+      invalidateProviderDiscovery(providerId);
       await refreshOpenCodeAfterConfigChange(`provider ${providerId} auth saved`);
 
       return res.json({
@@ -358,6 +481,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       }
 
       if (removed) {
+        invalidateProviderDiscovery(providerId);
         await refreshOpenCodeAfterConfigChange(`provider ${providerId} disconnected (${scope})`);
       }
 
