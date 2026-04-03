@@ -23,24 +23,26 @@ describe('runtime host', () => {
     const events = [];
     const unsubscribe = host.subscribe((event) => events.push(event));
 
+    const session = host.startSession({ source: 'test' });
     const task = host.enqueueTask({ metadata: { intent: 'happy-path' } });
     host.startTask(task.taskID);
     const completedTask = host.completeTask(task.taskID, { ok: true });
 
     unsubscribe();
 
+    expect(session.status).toBe('idle');
     expect(task.taskID).toBe('task-0001');
     expect(task.correlationID).toBe('corr-0001');
     expect(completedTask.status).toBe('completed');
     expect(host.getHostSnapshot().status).toBe('idle');
 
-    expect(events.map((event) => event.type)).toEqual(['task.enqueued', 'task.started', 'task.completed']);
-    expect(events.map((event) => event.payload.eventSequence)).toEqual([1, 2, 3]);
+    expect(events.map((event) => event.type)).toEqual(['runtime.started', 'task.enqueued', 'task.started', 'task.completed']);
+    expect(events.map((event) => event.payload.eventSequence)).toEqual([1, 2, 3, 4]);
     expect(events.every((event) => event.schemaVersion === RUNTIME_EVENT_VERSION)).toBe(true);
     expect(events.every((event) => event.occurredAt === FIXED_ISO)).toBe(true);
 
     const persistedEvents = store.getEvents();
-    expect(persistedEvents.map((event) => event.type)).toEqual(['task.enqueued', 'task.started', 'task.completed']);
+    expect(persistedEvents.map((event) => event.type)).toEqual(['runtime.started', 'task.enqueued', 'task.started', 'task.completed']);
   });
 
   it('cancels queued and running tasks with one final cancellation event per task', () => {
@@ -88,6 +90,18 @@ describe('runtime host', () => {
     expect(host.getTask(task.taskID)?.status).toBe('cancelled');
     expect(events.map((event) => event.type)).toEqual(['task.enqueued', 'task.cancelled']);
     expect(events.filter((event) => event.type === 'task.cancelled')).toHaveLength(1);
+  });
+
+  it('supports queued-to-waiting cancellation safely', () => {
+    const { host } = createTestHost();
+    const task = host.enqueueTask({ metadata: { scenario: 'waiting-cancel' } });
+
+    host.waitTask(task.taskID, 'awaiting approval');
+    const cancelledTask = host.cancelTask(task.taskID, 'user requested');
+
+    expect(host.getTask(task.taskID)?.status).toBe('cancelled');
+    expect(cancelledTask.status).toBe('cancelled');
+    expect(cancelledTask.cancelReason).toBe('user requested');
   });
 
   it('marks running task as failed and emits task.failed', () => {

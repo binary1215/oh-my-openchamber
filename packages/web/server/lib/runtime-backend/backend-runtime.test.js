@@ -259,6 +259,27 @@ describe('backend runtime integration', () => {
     });
   });
 
+  it('keeps existing config settings route response shape intact', async () => {
+    const baseDirectory = await createTempDirectory();
+    const runtimeBackend = createRuntimeBackend({ fsPromises, path, baseDirectory });
+
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, createOpenCodeRouteDependencies());
+    registerRuntimeRoutes(app, { runtimeBackend });
+
+    const server = http.createServer(app);
+    testServers.push(server);
+    const address = await listenOnEphemeralPort(server);
+    const baseUrl = `http://${address.host}:${address.port}`;
+
+    const response = await fetch(`${baseUrl}/api/config/settings`);
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+
+    expect(payload).toEqual({ projects: [] });
+  });
+
   it('reports failed tool executions as failed tasks instead of completed tasks', async () => {
     const baseDirectory = await createTempDirectory();
     const runtimeBackend = createRuntimeBackend({

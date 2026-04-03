@@ -193,6 +193,35 @@ describe('runtime persistence', () => {
     }
   });
 
+  it('rejects corrupted logs with malformed event type cleanly', () => {
+    const valid = createRuntimeEvent({
+      type: 'task.enqueued',
+      runtimeID: 'runtime-corrupted-test',
+      taskID: 'task-0001',
+      occurredAt: '2026-04-02T00:00:00.000Z',
+      payload: { eventID: 'evt-0001', eventSequence: 1, correlationID: 'corr-0001' },
+    });
+
+    const corrupted = {
+      ...createRuntimeEvent({
+        type: 'task.started',
+        runtimeID: 'runtime-corrupted-test',
+        taskID: 'task-0001',
+        occurredAt: '2026-04-02T00:00:01.000Z',
+        payload: { eventID: 'evt-0002', eventSequence: 2, correlationID: 'corr-0001' },
+      }),
+      type: 'task.unsupported',
+    };
+
+    try {
+      replayRuntimeEvents([valid, corrupted]);
+      throw new Error('Expected malformed event replay error');
+    } catch (error) {
+      expect(error).toBeInstanceOf(RuntimeReplayError);
+      expect(error.code).toBe(REPLAY_ERROR_CODE.MALFORMED_EVENT);
+    }
+  });
+
   it('fails replay with typed error on runtime mismatch', () => {
     const first = createRuntimeEvent({
       type: 'task.enqueued',

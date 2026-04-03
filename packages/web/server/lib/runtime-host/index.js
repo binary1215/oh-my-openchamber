@@ -132,6 +132,7 @@ export const createRuntimeHost = ({
     startedAt: nowIso(),
     status: 'idle',
   };
+  let sessionStarted = false;
 
   const tasks = new Map();
   const taskOrder = [];
@@ -273,6 +274,23 @@ export const createRuntimeHost = ({
     return cloneTask(runningTask);
   };
 
+  const waitTask = (taskID, reason = 'waiting') => {
+    const task = getTaskOrThrow(taskID);
+    if (task.status === 'waiting') {
+      return cloneTask(task);
+    }
+
+    if (task.status !== 'queued' && task.status !== 'running' && task.status !== 'blocked') {
+      return cloneTask(task);
+    }
+
+    const waitingTask = transitionTask(task, 'waiting', {
+      waitReason: reason,
+    });
+
+    return cloneTask(waitingTask);
+  };
+
   const completeTask = (taskID, output = {}) => {
     const task = getTaskOrThrow(taskID);
     if (task.status !== 'running') {
@@ -322,7 +340,7 @@ export const createRuntimeHost = ({
       return cloneTask(task);
     }
 
-    if (task.status !== 'queued' && task.status !== 'running') {
+    if (task.status !== 'queued' && task.status !== 'running' && task.status !== 'waiting') {
       return cloneTask(task);
     }
 
@@ -357,6 +375,17 @@ export const createRuntimeHost = ({
     });
   };
 
+  const startSession = (metadata = {}) => {
+    if (!sessionStarted) {
+      sessionStarted = true;
+      emit('runtime.started', null, {
+        metadata: cloneValue(metadata && typeof metadata === 'object' ? metadata : {}),
+      });
+    }
+
+    return getHostSnapshot();
+  };
+
   const subscribe = (listener) => bus.subscribe(listener);
 
   persistSnapshot();
@@ -366,7 +395,9 @@ export const createRuntimeHost = ({
     listTasks,
     getTask,
     enqueueTask,
+    startSession,
     startTask,
+    waitTask,
     completeTask,
     failTask,
     cancelTask,

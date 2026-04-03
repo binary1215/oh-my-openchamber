@@ -7,6 +7,37 @@ export const NEGOTIATION_OUTCOME = Object.freeze({
   REFUSE: 'refuse',
 });
 
+export const TASK_STATUS = Object.freeze({
+  QUEUED: 'queued',
+  RUNNING: 'running',
+  WAITING: 'waiting',
+  TOOL: 'tool',
+  BLOCKED: 'blocked',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+});
+
+export const TASK_TRANSITION_RULES = Object.freeze({
+  queued: Object.freeze(['running', 'waiting', 'blocked', 'cancelled']),
+  running: Object.freeze(['waiting', 'tool', 'blocked', 'completed', 'failed', 'cancelled']),
+  waiting: Object.freeze(['running', 'tool', 'blocked', 'failed', 'cancelled']),
+  tool: Object.freeze(['running', 'blocked', 'completed', 'failed', 'cancelled']),
+  blocked: Object.freeze(['waiting', 'running', 'failed', 'cancelled']),
+  completed: Object.freeze([]),
+  failed: Object.freeze([]),
+  cancelled: Object.freeze([]),
+});
+
+export function canTransitionTaskStatus(fromStatus, toStatus) {
+  if (typeof fromStatus !== 'string' || typeof toStatus !== 'string') {
+    return false;
+  }
+
+  const allowed = TASK_TRANSITION_RULES[fromStatus];
+  return Array.isArray(allowed) && allowed.includes(toStatus);
+}
+
 /** @type {ReadonlyArray<RuntimeEventType>} */
 export const RUNTIME_EVENT_TYPES = Object.freeze([
   'runtime.started',
@@ -123,7 +154,7 @@ export function negotiateProviderCapabilities(matrix) {
  * @property {string} taskID
  * @property {string} runtimeID
  * @property {string} createdAt
- * @property {'queued' | 'running' | 'completed' | 'failed' | 'cancelled'} status
+ * @property {'queued' | 'running' | 'waiting' | 'tool' | 'blocked' | 'completed' | 'failed' | 'cancelled'} status
  * @property {Record<string, unknown>} metadata
  */
 

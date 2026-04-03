@@ -201,8 +201,7 @@ const createOpenAiFamilyAdapter = ({ providerID, options = {}, endpointDefaults 
 
   const resolveBaseUrl = () => {
     const context = resolveContext();
-    const hostOrigin = context.envConfig.configuredOpenCodeHost?.origin ?? null;
-    return normalizeBaseUrl(options.baseUrl || context.baseUrlFromAuth || hostOrigin, DEFAULT_BASE_URL[providerID]);
+    return normalizeBaseUrl(options.baseUrl || context.baseUrlFromAuth, DEFAULT_BASE_URL[providerID]);
   };
 
   const resolveAuthHeaders = () => {
@@ -313,8 +312,7 @@ export function createOllamaAdapter(options = {}) {
 
   const resolveBaseUrl = () => {
     const context = resolveContext();
-    const hostOrigin = context.envConfig.configuredOpenCodeHost?.origin ?? null;
-    return normalizeBaseUrl(options.baseUrl || context.baseUrlFromAuth || hostOrigin, DEFAULT_BASE_URL.ollama);
+    return normalizeBaseUrl(options.baseUrl || context.baseUrlFromAuth, DEFAULT_BASE_URL.ollama);
   };
 
   return {

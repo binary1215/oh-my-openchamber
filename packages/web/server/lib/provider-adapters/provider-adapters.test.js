@@ -57,6 +57,19 @@ describe('provider adapters', () => {
     expect(adapter.parseStream(LITELLM_COMPATIBLE_SSE_STREAM)).toHaveLength(1);
   });
 
+  it('does not fall back to opencode transport host for provider base URLs', () => {
+    const adapter = createLiteLlmAdapter({
+      getProviderAuth: () => ({ apiKey: 'test-api-key' }),
+      getProviderSources: () => ({ sources: { auth: { exists: true } } }),
+      resolveOpenCodeEnvConfig: () => ({
+        configuredOpenCodeHost: { origin: 'http://transport-host:4096' },
+      }),
+    });
+
+    const request = adapter.buildModelsListRequest();
+    expect(request.baseUrl).toBe('http://127.0.0.1:4000');
+  });
+
   it('normalizes native Ollama adapter behavior without OpenAI endpoint semantics', () => {
     const adapter = createOllamaAdapter(createDependencyStubs());
     const request = adapter.buildChatRequest({
@@ -114,6 +127,29 @@ describe('provider adapters', () => {
     try {
       ollamaAdapter.parseStream(OPENAI_COMPATIBLE_SSE_STREAM);
       throw new Error('expected ollamaAdapter.parseStream to throw');
+    } catch (error) {
+      expect(error.name).toBe('ProviderAdapterParseError');
+      expect(error.code).toBe(PROVIDER_ADAPTER_ERROR_CODE.STREAM_PARSE);
+      expect(error.providerID).toBe('ollama');
+    }
+  });
+
+  it('returns typed parse errors for malformed adapter stream payloads', () => {
+    const openAiAdapter = createOpenAiCompatibleAdapter(createDependencyStubs());
+    const ollamaAdapter = createOllamaAdapter(createDependencyStubs());
+
+    try {
+      openAiAdapter.parseStream('data: {"broken":\n\n');
+      throw new Error('expected malformed OpenAI-compatible stream to throw');
+    } catch (error) {
+      expect(error.name).toBe('ProviderAdapterParseError');
+      expect(error.code).toBe(PROVIDER_ADAPTER_ERROR_CODE.STREAM_PARSE);
+      expect(error.providerID).toBe('openai');
+    }
+
+    try {
+      ollamaAdapter.parseStream('{"message": {"content": "oops"}\n');
+      throw new Error('expected malformed Ollama stream to throw');
     } catch (error) {
       expect(error.name).toBe('ProviderAdapterParseError');
       expect(error.code).toBe(PROVIDER_ADAPTER_ERROR_CODE.STREAM_PARSE);

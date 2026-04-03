@@ -3,6 +3,8 @@ import { describe, expect, it } from 'bun:test';
 import {
   NEGOTIATION_OUTCOME,
   RUNTIME_EVENT_VERSION,
+  TASK_STATUS,
+  canTransitionTaskStatus,
   createRuntimeEvent,
   isRuntimeEventType,
   negotiateProviderCapabilities,
@@ -58,5 +60,18 @@ describe('runtime contracts', () => {
     expect(result.outcome).toBe(NEGOTIATION_OUTCOME.DEGRADE);
     expect(result.missingCapabilities).toEqual(['images']);
     expect(result.degradedCapabilities).toEqual(['images']);
+  });
+
+  it('defines contract-level task states including waiting, tool, and blocked transitions', () => {
+    expect(TASK_STATUS.WAITING).toBe('waiting');
+    expect(TASK_STATUS.TOOL).toBe('tool');
+    expect(TASK_STATUS.BLOCKED).toBe('blocked');
+
+    expect(canTransitionTaskStatus('queued', 'waiting')).toBe(true);
+    expect(canTransitionTaskStatus('running', 'tool')).toBe(true);
+    expect(canTransitionTaskStatus('waiting', 'cancelled')).toBe(true);
+    expect(canTransitionTaskStatus('blocked', 'running')).toBe(true);
+    expect(canTransitionTaskStatus('completed', 'running')).toBe(false);
+    expect(canTransitionTaskStatus('failed', 'completed')).toBe(false);
   });
 });
