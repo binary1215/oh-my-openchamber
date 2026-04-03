@@ -2,9 +2,9 @@ import React from 'react';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import { Button } from '@/components/ui/button';
-import { useConfigStore } from '@/stores/useConfigStore';
+import { useConfigStore, type ProviderDiscovery } from '@/stores/useConfigStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
-import { RiAddLine, RiStackLine } from '@remixicon/react';
+import { RiAddLine, RiStackLine, RiTimeLine, RiCheckboxCircleLine, RiCloseCircleLine, RiInformationLine } from '@remixicon/react';
 import { cn } from '@/lib/utils';
 import { SettingsProjectSelector } from '@/components/sections/shared/SettingsProjectSelector';
 import { opencodeClient } from '@/lib/opencode/client';
@@ -16,6 +16,8 @@ type SidebarProvider = {
   id: string;
   name?: string;
   models?: unknown[];
+  runtimeManaged?: boolean;
+  discovery?: ProviderDiscovery;
 };
 
 const getCurrentDirectory = (): string | null => {
@@ -89,6 +91,7 @@ export const ProvidersSidebar: React.FC<ProvidersSidebarProps> = ({ onItemSelect
         id: option.id,
         name: option.name || option.id,
         models: [],
+        runtimeManaged: option.runtimeManaged,
       });
     }
 
@@ -227,12 +230,54 @@ export const ProvidersSidebar: React.FC<ProvidersSidebarProps> = ({ onItemSelect
 };
 
 const ProviderListItem: React.FC<{
-  provider: { id: string; name?: string; models?: unknown[] };
+  provider: SidebarProvider;
   selectedProviderId: string;
   onSelect: () => void;
 }> = ({ provider, selectedProviderId, onSelect }) => {
   const modelCount = Array.isArray(provider.models) ? provider.models.length : 0;
   const isSelected = provider.id === selectedProviderId;
+  const normalizedId = provider.id.trim().toLowerCase();
+  const runtimeManaged = provider.runtimeManaged === true || normalizedId === 'ollama' || normalizedId === 'litellm';
+  const discoveryState = runtimeManaged ? provider.discovery?.state : undefined;
+
+  const trailing = (() => {
+    if (discoveryState === 'discovering') {
+      return (
+        <span className="typography-micro flex items-center gap-1 text-[var(--status-info)] flex-shrink-0">
+          <RiTimeLine className="h-3.5 w-3.5 animate-pulse" aria-hidden="true" />
+          <span className="hidden sm:inline">Discovering</span>
+        </span>
+      );
+    }
+    if (discoveryState === 'empty') {
+      return (
+        <span className="typography-micro flex items-center gap-1 text-[var(--status-warning)] flex-shrink-0" title="No models found">
+          <RiInformationLine className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="hidden sm:inline">Empty</span>
+        </span>
+      );
+    }
+    if (discoveryState === 'error') {
+      return (
+        <span className="typography-micro flex items-center gap-1 text-[var(--status-error)] flex-shrink-0" title="Discovery error">
+          <RiCloseCircleLine className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="hidden sm:inline">Error</span>
+        </span>
+      );
+    }
+    if (discoveryState === 'ready') {
+      return (
+        <span className="typography-micro flex items-center gap-1 text-muted-foreground/60 flex-shrink-0" title="Ready">
+          <span>{modelCount}</span>
+          <RiCheckboxCircleLine className="h-3.5 w-3.5 text-[var(--status-success)]" aria-hidden="true" />
+        </span>
+      );
+    }
+
+    return (
+      <span className="typography-micro text-muted-foreground/60 flex-shrink-0">{modelCount}</span>
+    );
+  })();
 
   return (
     <div
@@ -252,9 +297,7 @@ const ProviderListItem: React.FC<{
         <span className="typography-ui-label font-normal truncate flex-1 min-w-0 text-foreground">
           {provider.name || provider.id}
         </span>
-        <span className="typography-micro text-muted-foreground/60 flex-shrink-0">
-          {modelCount}
-        </span>
+        {trailing}
       </button>
     </div>
   );

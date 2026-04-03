@@ -542,7 +542,18 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                 });
                 return { ...provider, models: visibleModels };
             })
-            .filter((provider) => provider.models.length > 0);
+            .filter((provider) => {
+                if (provider.models.length > 0) {
+                    return true;
+                }
+                const normalizedId = String(provider.id).trim().toLowerCase();
+                const isRuntimeManaged =
+                    provider.runtimeManaged === true ||
+                    Boolean(provider.discovery?.state) ||
+                    normalizedId === 'ollama' ||
+                    normalizedId === 'litellm';
+                return isRuntimeManaged;
+            });
     }, [providers, hiddenModels]);
 
     const currentMetadata =
@@ -1531,7 +1542,15 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                     )}
 
                     {filteredProviders.map(({ provider, providerModels }) => {
-                        if (providerModels.length === 0 && !normalizedQuery.length) {
+                        const normalizedProviderId = String(provider.id).trim().toLowerCase();
+                        const runtimeManaged =
+                            provider.runtimeManaged === true ||
+                            Boolean(provider.discovery?.state) ||
+                            normalizedProviderId === 'ollama' ||
+                            normalizedProviderId === 'litellm';
+                        const discoveryState = runtimeManaged ? provider.discovery?.state : undefined;
+
+                        if (providerModels.length === 0 && !normalizedQuery.length && !runtimeManaged) {
                             return null;
                         }
 
@@ -1551,13 +1570,22 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                             providerId={provider.id}
                                             className="h-3.5 w-3.5"
                                         />
-                                        <span className="typography-meta font-medium text-foreground">
-                                            {provider.name}
-                                        </span>
-                                        {isActiveProvider && (
-                                            <span className="typography-micro text-primary/80">Current</span>
-                                        )}
-                                    </div>
+                                         <span className="typography-meta font-medium text-foreground">
+                                             {provider.name}
+                                         </span>
+                                         {runtimeManaged && discoveryState === 'discovering' && (
+                                             <span className="typography-micro text-[var(--status-info)]">Discovering…</span>
+                                         )}
+                                         {runtimeManaged && discoveryState === 'empty' && (
+                                             <span className="typography-micro text-[var(--status-warning)]">No models</span>
+                                         )}
+                                         {runtimeManaged && discoveryState === 'error' && (
+                                             <span className="typography-micro text-[var(--status-error)]">Error</span>
+                                         )}
+                                         {isActiveProvider && (
+                                             <span className="typography-micro text-primary/80">Current</span>
+                                         )}
+                                     </div>
                                     {isExpanded ? (
                                         <RiArrowDownSLine className="h-3 w-3 text-muted-foreground" />
                                     ) : (
@@ -1649,9 +1677,21 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                         })}
                                     </div>
                                 )}
-                            </div>
-                        );
-                    })}
+
+                                {isExpanded && providerModels.length === 0 && runtimeManaged && (
+                                    <div className="border-t border-border/30 px-2 py-2 typography-meta text-muted-foreground">
+                                        {discoveryState === 'discovering'
+                                            ? 'Discovering models…'
+                                            : discoveryState === 'empty'
+                                                ? 'No models found for this provider.'
+                                                : discoveryState === 'error'
+                                                    ? 'Model discovery failed.'
+                                                    : 'No models available.'}
+                                    </div>
+                                )}
+                              </div>
+                         );
+                     })}
                 </div>
             </MobileOverlayPanel>
         );
@@ -2032,9 +2072,27 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                     const modelName = getModelDisplayName(model);
                     return filterByQuery(modelName, provider.name || provider.id || '', desktopModelQuery);
                 });
-                return { ...provider, models: filteredModels };
+                const providerName = provider.name || provider.id || '';
+                const matchesProvider = normalizedDesktopQuery.length === 0
+                    ? true
+                    : matchesModelSearch(providerName, normalizedDesktopQuery) || matchesModelSearch(String(provider.id), normalizedDesktopQuery);
+                return { ...provider, models: filteredModels, matchesProvider };
             })
-            .filter((provider) => provider.models.length > 0);
+            .filter((provider) => {
+                if (provider.models.length > 0) {
+                    return true;
+                }
+                if ((provider as { matchesProvider?: boolean }).matchesProvider) {
+                    return true;
+                }
+                const normalizedId = String(provider.id).trim().toLowerCase();
+                const isRuntimeManaged =
+                    provider.runtimeManaged === true ||
+                    Boolean(provider.discovery?.state) ||
+                    normalizedId === 'ollama' ||
+                    normalizedId === 'litellm';
+                return isRuntimeManaged;
+            });
 
         const providerSections = filteredProviders.map((provider) => {
             const providerId = typeof provider.id === 'string' ? provider.id : '';
@@ -2267,26 +2325,74 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                                 title={forceExpandProviders ? undefined : (isExpanded ? 'Collapse provider' : 'Expand provider')}
                                             >
                                                 <div className="flex min-w-0 items-center gap-2">
-                                                    <ProviderLogo
-                                                        providerId={provider.id}
-                                                        className="h-4 w-4 flex-shrink-0"
-                                                    />
-                                                    <span className="min-w-0 truncate">{provider.name}</span>
-                                                    <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-muted-foreground">
-                                                        {isExpanded ? (
-                                                            <RiArrowDownSLine className="h-4 w-4" />
-                                                        ) : (
-                                                            <RiArrowRightSLine className="h-4 w-4" />
-                                                        )}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            {isExpanded && visibleModels.map((model: ProviderModel) => {
-                                                const idx = currentFlatIndex++;
-                                                return renderModelRow(model, provider.id as string, model.id as string, 'provider', idx, modelSelectedIndex === idx);
-                                            })}
-                                        </div>
-                                    ))}
+                                                     <ProviderLogo
+                                                         providerId={provider.id}
+                                                         className="h-4 w-4 flex-shrink-0"
+                                                     />
+                                                     <span className="min-w-0 truncate">{provider.name}</span>
+                                                     {(() => {
+                                                         const normalizedId = String(provider.id).trim().toLowerCase();
+                                                         const runtimeManaged =
+                                                             provider.runtimeManaged === true ||
+                                                             Boolean(provider.discovery?.state) ||
+                                                             normalizedId === 'ollama' ||
+                                                             normalizedId === 'litellm';
+                                                         if (!runtimeManaged) {
+                                                             return null;
+                                                         }
+                                                         const state = provider.discovery?.state;
+                                                         if (state === 'discovering') {
+                                                             return (
+                                                                 <span className="typography-micro text-[var(--status-info)]">Discovering…</span>
+                                                             );
+                                                         }
+                                                         if (state === 'empty') {
+                                                             return (
+                                                                 <span className="typography-micro text-[var(--status-warning)]">No models</span>
+                                                             );
+                                                         }
+                                                         if (state === 'error') {
+                                                             return (
+                                                                 <span className="typography-micro text-[var(--status-error)]">Error</span>
+                                                             );
+                                                         }
+                                                         return null;
+                                                     })()}
+                                                     <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-muted-foreground">
+                                                         {isExpanded ? (
+                                                             <RiArrowDownSLine className="h-4 w-4" />
+                                                         ) : (
+                                                             <RiArrowRightSLine className="h-4 w-4" />
+                                                         )}
+                                                     </span>
+                                                 </div>
+                                             </div>
+                                             {isExpanded && visibleModels.map((model: ProviderModel) => {
+                                                 const idx = currentFlatIndex++;
+                                                 return renderModelRow(model, provider.id as string, model.id as string, 'provider', idx, modelSelectedIndex === idx);
+                                             })}
+                                             {isExpanded && visibleModels.length === 0 && (
+                                                 <div className="px-3 py-2 typography-meta text-muted-foreground">
+                                                     {(() => {
+                                                         const normalizedId = String(provider.id).trim().toLowerCase();
+                                                         const runtimeManaged =
+                                                             provider.runtimeManaged === true ||
+                                                             Boolean(provider.discovery?.state) ||
+                                                             normalizedId === 'ollama' ||
+                                                             normalizedId === 'litellm';
+                                                         if (runtimeManaged) {
+                                                             const state = provider.discovery?.state;
+                                                             if (state === 'discovering') return 'Discovering models…';
+                                                             if (state === 'empty') return 'No models found for this provider.';
+                                                             if (state === 'error') return 'Model discovery failed.';
+                                                             return 'No models available.';
+                                                         }
+                                                         return normalizedDesktopQuery.length > 0 ? 'No matching models.' : 'No models available.';
+                                                     })()}
+                                                 </div>
+                                             )}
+                                         </div>
+                                     ))}
                                 </div>
                             </ScrollableOverlay>
 

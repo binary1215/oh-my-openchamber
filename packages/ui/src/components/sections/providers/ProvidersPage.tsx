@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
-import { useConfigStore } from '@/stores/useConfigStore';
+import { useConfigStore, type ProviderDiscovery } from '@/stores/useConfigStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,21 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from '@/components/ui';
-import { RiStackLine, RiToolsLine, RiBrainAi3Line, RiFileImageLine, RiArrowDownSLine, RiCheckLine, RiSearchLine, RiInformationLine, RiEyeLine, RiEyeOffLine } from '@remixicon/react';
+import {
+  RiStackLine,
+  RiToolsLine,
+  RiBrainAi3Line,
+  RiFileImageLine,
+  RiArrowDownSLine,
+  RiCheckLine,
+  RiSearchLine,
+  RiInformationLine,
+  RiEyeLine,
+  RiEyeOffLine,
+  RiTimeLine,
+  RiCheckboxCircleLine,
+  RiCloseCircleLine,
+} from '@remixicon/react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { reloadOpenCodeConfiguration } from '@/stores/useAgentsStore';
 import { cn } from '@/lib/utils';
@@ -29,11 +43,7 @@ type DisplayProvider = {
   runtimeManaged?: boolean;
   connectMode?: 'api' | 'config';
   supportsBaseUrl?: boolean;
-};
-
-const needsBaseUrlInput = (providerId: string, supportsBaseUrl?: boolean) => {
-  const normalized = providerId.trim().toLowerCase();
-  return normalized === 'ollama' || normalized === 'litellm' || supportsBaseUrl === true;
+  discovery?: ProviderDiscovery;
 };
 
 const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
@@ -60,6 +70,7 @@ export const ProvidersPage: React.FC = () => {
   const providers = useConfigStore((state) => state.providers);
   const selectedProviderId = useConfigStore((state) => state.selectedProviderId);
   const setSelectedProvider = useConfigStore((state) => state.setSelectedProvider);
+  const loadProviders = useConfigStore((state) => state.loadProviders);
   const getModelMetadata = useConfigStore((state) => state.getModelMetadata);
   const hiddenModels = useUIStore((state) => state.hiddenModels);
   const toggleHiddenModel = useUIStore((state) => state.toggleHiddenModel);
@@ -83,6 +94,134 @@ export const ProvidersPage: React.FC = () => {
   const [providerDropdownOpen, setProviderDropdownOpen] = React.useState(false);
   const [providerSources, setProviderSources] = React.useState<Record<string, ProviderSources>>({});
   const [showAuthPanel, setShowAuthPanel] = React.useState(false);
+  const discoveryPollTokenRef = React.useRef(0);
+
+  React.useEffect(() => {
+    return () => {
+      discoveryPollTokenRef.current += 1;
+    };
+  }, []);
+
+  const sleepMs = React.useCallback((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)), []);
+
+  const pollProviderDiscovery = React.useCallback(
+    async (providerId: string) => {
+      const normalizedId = providerId.trim().toLowerCase();
+      const shouldPoll = normalizedId === 'ollama' || normalizedId === 'litellm';
+
+      const token = discoveryPollTokenRef.current + 1;
+      discoveryPollTokenRef.current = token;
+
+      const maxWaitMs = 30_000;
+      const intervalMs = 650;
+      const start = Date.now();
+
+      while (discoveryPollTokenRef.current === token && Date.now() - start < maxWaitMs) {
+        await loadProviders();
+
+        const provider = useConfigStore
+          .getState()
+          .providers.find((candidate) => candidate.id.trim().toLowerCase() === normalizedId);
+
+        const discoveryState = provider?.discovery?.state;
+        const runtimeManaged = provider?.runtimeManaged === true;
+
+        if (!shouldPoll && !runtimeManaged) {
+          return;
+        }
+
+        if (discoveryState && discoveryState !== 'discovering') {
+          return;
+        }
+
+        await sleepMs(intervalMs);
+      }
+    },
+    [loadProviders, sleepMs]
+  );
+
+  const discoveryStatus = React.useCallback(
+    (provider: DisplayProvider | undefined, busyKey: string | null) => {
+      if (!provider) {
+        return null;
+      }
+
+      const normalizedId = provider.id.trim().toLowerCase();
+      const runtimeManaged = provider.runtimeManaged === true || normalizedId === 'ollama' || normalizedId === 'litellm';
+      if (!runtimeManaged) {
+        return null;
+      }
+
+      const saving =
+        busyKey === `api:${provider.id}` ||
+        busyKey === `connect:${provider.id}` ||
+        busyKey === `disconnect:${provider.id}`;
+
+      if (saving) {
+        return {
+          state: 'saving',
+          icon: RiTimeLine,
+          iconClassName: 'text-[var(--status-info)] animate-pulse',
+          label: 'Saving…',
+          message: 'Applying connection settings.',
+        };
+      }
+
+      const state = provider.discovery?.state;
+      if (!state) {
+        return null;
+      }
+
+      if (state === 'discovering') {
+        return {
+          state,
+          icon: RiTimeLine,
+          iconClassName: 'text-[var(--status-info)] animate-pulse',
+          label: 'Discovering…',
+          message: provider.discovery?.message ?? 'Looking for available models.',
+        };
+      }
+
+      if (state === 'ready') {
+        return {
+          state,
+          icon: RiCheckboxCircleLine,
+          iconClassName: 'text-[var(--status-success)]',
+          label: 'Ready',
+          message: provider.discovery?.message ?? 'Model discovery completed.',
+        };
+      }
+
+      if (state === 'empty') {
+        return {
+          state,
+          icon: RiInformationLine,
+          iconClassName: 'text-[var(--status-warning)]',
+          label: 'No models',
+          message: provider.discovery?.message ?? 'No models were returned for this provider.',
+        };
+      }
+
+      if (state === 'error') {
+        return {
+          state,
+          icon: RiCloseCircleLine,
+          iconClassName: 'text-[var(--status-error)]',
+          label: 'Error',
+          message: provider.discovery?.message ?? 'Model discovery failed.',
+        };
+      }
+
+      return {
+        state,
+        icon: RiInformationLine,
+        iconClassName: 'text-muted-foreground',
+        label: state,
+        message: provider.discovery?.message,
+      };
+    },
+    []
+  );
 
   const connectedProviders = React.useMemo<DisplayProvider[]>(() => {
     const connectedById = new Map<string, DisplayProvider>();
@@ -282,7 +421,6 @@ export const ProvidersPage: React.FC = () => {
 
   const handleSaveApiKey = async (providerId: string) => {
     const apiKey = apiKeyInputs[providerId]?.trim() ?? '';
-    const providerOption = availableProviders.find((provider) => provider.id === providerId);
     const baseURL = baseUrlInputs[providerId]?.trim() ?? '';
 
     if (!apiKey && !baseURL) {
@@ -309,8 +447,9 @@ export const ProvidersPage: React.FC = () => {
       toast.success('API key saved');
       setApiKeyInputs((prev) => ({ ...prev, [providerId]: '' }));
       setBaseUrlInputs((prev) => ({ ...prev, [providerId]: '' }));
-      await reloadOpenCodeConfiguration({ scopes: ["providers"], mode: "active" });
+      await reloadOpenCodeConfiguration({ scopes: ['providers'], mode: 'active' });
       setSelectedProvider(providerId);
+      void pollProviderDiscovery(providerId);
     } catch (error) {
       console.error('Failed to save API key:', error);
       toast.error('Failed to save API key');
@@ -326,8 +465,9 @@ export const ProvidersPage: React.FC = () => {
     try {
       await connectRuntimeManagedProvider(providerId);
       toast.success('Provider connected');
-      await reloadOpenCodeConfiguration({ scopes: ["providers"], mode: "active" });
+      await reloadOpenCodeConfiguration({ scopes: ['providers'], mode: 'active' });
       setSelectedProvider(providerId);
+      void pollProviderDiscovery(providerId);
     } catch (error) {
       console.error('Failed to connect provider:', error);
       toast.error('Failed to connect provider');
@@ -425,8 +565,9 @@ export const ProvidersPage: React.FC = () => {
       toast.success('OAuth connection completed');
       setOauthCodes((prev) => ({ ...prev, [codeKey]: '' }));
       setPendingOAuth(null);
-      await reloadOpenCodeConfiguration({ scopes: ["providers"], mode: "active" });
+      await loadProviders();
       setSelectedProvider(providerId);
+      void pollProviderDiscovery(providerId);
     } catch (error) {
       console.error('Failed to complete OAuth flow:', error);
       toast.error('Failed to complete OAuth flow');
@@ -472,7 +613,7 @@ export const ProvidersPage: React.FC = () => {
       }
 
       toast.success('Provider disconnected');
-      await reloadOpenCodeConfiguration({ scopes: ["providers"], mode: "active" });
+      await loadProviders();
     } catch (error) {
       console.error('Failed to disconnect provider:', error);
       toast.error('Failed to disconnect provider');
@@ -827,6 +968,24 @@ export const ProvidersPage: React.FC = () => {
             <p className="typography-meta text-muted-foreground truncate">
               <span className="font-mono">{selectedProvider.id}</span>
             </p>
+            {(() => {
+              const status = discoveryStatus(selectedProvider, authBusyKey);
+              if (!status) {
+                return null;
+              }
+              const Icon = status.icon;
+              return (
+                <div className="mt-1 flex items-start gap-1.5">
+                  <Icon className={cn('h-3.5 w-3.5 shrink-0 mt-0.5', status.iconClassName)} aria-hidden="true" />
+                  <div className="min-w-0">
+                    <div className="typography-micro text-foreground/90">{status.label}</div>
+                    {status.message ? (
+                      <div className="typography-micro text-muted-foreground truncate">{status.message}</div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -1088,7 +1247,37 @@ export const ProvidersPage: React.FC = () => {
             </div>
 
             {filteredModels.length === 0 ? (
-              <p className="typography-meta text-muted-foreground py-4 text-center">No models match this filter.</p>
+              (() => {
+                const status = discoveryStatus(selectedProvider, authBusyKey);
+
+                if (providerModels.length === 0 && status?.state === 'discovering') {
+                  return (
+                    <p className="typography-meta text-muted-foreground py-4 text-center">Discovering models…</p>
+                  );
+                }
+
+                if (providerModels.length === 0 && status?.state === 'empty') {
+                  return (
+                    <p className="typography-meta text-muted-foreground py-4 text-center">No models found for this provider.</p>
+                  );
+                }
+
+                if (providerModels.length === 0 && status?.state === 'error') {
+                  return (
+                    <p className="typography-meta text-muted-foreground py-4 text-center">Model discovery failed.</p>
+                  );
+                }
+
+                if (providerModels.length === 0) {
+                  return (
+                    <p className="typography-meta text-muted-foreground py-4 text-center">No models available.</p>
+                  );
+                }
+
+                return (
+                  <p className="typography-meta text-muted-foreground py-4 text-center">No models match this filter.</p>
+                );
+              })()
             ) : (
               <div className="divide-y divide-[var(--surface-subtle)]">
                 {filteredModels.map((model) => {
