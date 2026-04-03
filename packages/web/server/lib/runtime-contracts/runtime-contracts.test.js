@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   NEGOTIATION_OUTCOME,
   RUNTIME_EVENT_VERSION,
+  TASK_TRANSITION_RULES,
   TASK_STATUS,
   canTransitionTaskStatus,
   createRuntimeEvent,
@@ -73,5 +74,17 @@ describe('runtime contracts', () => {
     expect(canTransitionTaskStatus('blocked', 'running')).toBe(true);
     expect(canTransitionTaskStatus('completed', 'running')).toBe(false);
     expect(canTransitionTaskStatus('failed', 'completed')).toBe(false);
+  });
+
+  it('proves the full task transition matrix invariants', () => {
+    const allStatuses = Object.values(TASK_STATUS);
+
+    for (const fromStatus of allStatuses) {
+      const allowed = new Set(TASK_TRANSITION_RULES[fromStatus]);
+
+      for (const toStatus of allStatuses) {
+        expect(canTransitionTaskStatus(fromStatus, toStatus)).toBe(allowed.has(toStatus));
+      }
+    }
   });
 });
