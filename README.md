@@ -1,4 +1,4 @@
-# <picture><source media="(prefers-color-scheme: dark)" srcset="docs/references/badges/openchamber-logo-dark.svg"><img src="docs/references/badges/openchamber-logo-light.svg" width="32" height="32" align="absmiddle" /></picture> OpenChamber
+# <picture><source media="(prefers-color-scheme: dark)" srcset="docs/references/badges/openchamber-logo-dark.svg"><img src="docs/references/badges/openchamber-logo-light.svg" width="32" height="32" align="absmiddle" /></picture> Oh My OpenChamber
 
 [![GitHub stars](https://img.shields.io/github/stars/btriapitsyn/openchamber?style=flat&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgZmlsbD0iI2YxZWNlYyIgdmlld0JveD0iMCAwIDI1NiAyNTYiPjxwYXRoIGQ9Ik0yMjkuMDYsMTA4Ljc5bC00OC43LDQyLDE0Ljg4LDYyLjc5YTguNCw4LjQsMCwwLDEtMTIuNTIsOS4xN0wxMjgsMTg5LjA5LDczLjI4LDIyMi43NGE4LjQsOC40LDAsMCwxLTEyLjUyLTkuMTdsMTQuODgtNjIuNzktNDguNy00MkE4LjQ2LDguNDYsMCwwLDEsMzEuNzMsOTRMOTUuNjQsODguOGwyNC42Mi01OS42YTguMzYsOC4zNiwwLDAsMSwxNS40OCwwbDI0LjYyLDU5LjZMMjI0LjI3LDk0QTguNDYsOC40NiwwLDAsMSwyMjkuMDYsMTA4Ljc5WiIgb3BhY2l0eT0iMC4yIj48L3BhdGg%2BPHBhdGggZD0iTTIzOS4xOCw5Ny4yNkExNi4zOCwxNi4zOCwwLDAsMCwyMjQuOTIsODZsLTU5LTQuNzZMMTQzLjE0LDI2LjE1YTE2LjM2LDE2LjM2LDAsMCwwLTMwLjI3LDBMOTAuMTEsODEuMjMsMzEuMDgsODZhMTYuNDYsMTYuNDYsMCwwLDAtOS4zNywyOC44Nmw0NSwzOC44M0w1MywyMTEuNzVhMTYuMzgsMTYuMzgsMCwwLDAsMjQuNSwxNy44MkwxMjgsMTk4LjQ5bDUwLjUzLDMxLjA4QTE2LjQsMTYuNCwwLDAsMCwyMDMsMjExLjc1bC0xMy43Ni01OC4wNyw0NS0zOC44M0ExNi40MywxNi40MywwLDAsMCwyMzkuMTgsOTcuMjZabS0xNS4zNCw1LjQ3LTQ4LjcsNDJhOCw4LDAsMCwwLTIuNTYsNy45MWwxNC44OCw2Mi44YS4zNy4zNywwLDAsMS0uMTcuNDhjLS4xOC4xNC0uMjMuMTEtLjM4LDBsLTU0LjcyLTMzLjY1YTgsOCwwLDAsMC04LjM4LDBMNjkuMDksMjE1Ljk0Yy0uMTUuMDktLjE5LjEyLS4zOCwwYS4zNy4zNywwLDAsMS0uMTctLjQ4bDE0Ljg4LTYyLjhhOCw4LDAsMCwwLTIuNTYtNy45MWwtNDguNy00MmMtLjEyLS4xLS4yMy0uMTktLjEzLS41cy4xOC0uMjcuMzMtLjI5bDYzLjkyLTUuMTZBOCw4LDAsMCwwLDEwMyw5MS44NmwyNC42Mi01OS42MWMuMDgtLjE3LjExLS4yNS4zNS0uMjVzLjI3LjA4LjM1LjI1TDE1Myw5MS44NmE4LDgsMCwwLDAsNi43NSw0LjkybDYzLjkyLDUuMTZjLjE1LDAsLjI0LDAsLjMzLjI5UzIyNCwxMDIuNjMsMjIzLjg0LDEwMi43M1oiPjwvcGF0aD48L3N2Zz4%3D&logoColor=FFFCF0&labelColor=100F0F&color=66800B)](https://github.com/btriapitsyn/openchamber/stargazers)
 [![GitHub release](https://img.shields.io/github/v/release/btriapitsyn/openchamber?style=flat&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgZmlsbD0iI2YxZWNlYyIgdmlld0JveD0iMCAwIDI1NiAyNTYiPjxwYXRoIGQ9Ik0xMjgsMTI5LjA5VjIzMmE4LDgsMCwwLDEtMy44NC0xbC04OC00OC4xOGE4LDgsMCwwLDEtNC4xNi03VjgwLjE4YTgsOCwwLDAsMSwuNy0zLjI1WiIgb3BhY2l0eT0iMC4yIj48L3BhdGg%2BPHBhdGggZD0iTTIyMy42OCw2Ni4xNSwxMzUuNjgsMThhMTUuODgsMTUuODgsMCwwLDAtMTUuMzYsMGwtODgsNDguMTdhMTYsMTYsMCwwLDAtOC4zMiwxNHY5NS42NGExNiwxNiwwLDAsMCw4LjMyLDE0bDg4LDQ4LjE3YTE1Ljg4LDE1Ljg4LDAsMCwwLDE1LjM2LDBsODgtNDguMTdhMTYsMTYsMCwwLDAsOC4zMi0xNFY4MC4xOEExNiwxNiwwLDAsMCwyMjMuNjgsNjYuMTVaTTEyOCwzMmw4MC4zNCw0NC0yOS43NywxNi4zLTgwLjM1LTQ0Wk0xMjgsMTIwLDQ3LjY2LDc2bDMzLjktMTguNTYsODAuMzQsNDRaTTQwLDkwbDgwLDQzLjc4djg1Ljc5TDQwLDE3NS44MlptMTc2LDg1Ljc4aDBsLTgwLDQzLjc5VjEzMy44MmwzMi0xNy41MVYxNTJhOCw4LDAsMCwwLDE2LDBWMTA3LjU1TDIxNiw5MHY4NS43N1oiPjwvcGF0aD48L3N2Zz4%3D&logoColor=FFFCF0&labelColor=100F0F&color=205EA6)](https://github.com/btriapitsyn/openchamber/releases/latest)
@@ -8,9 +8,9 @@
 
 ## **OpenCode, everywhere.** Desktop. Browser. Phone.
 
-### A rich interface for [OpenCode](https://opencode.ai). Review diffs, manage agents, run dev servers, and keep the big picture while your AI codes.
+### A rich interface for [OpenCode](https://opencode.ai), extended with Oh My OpenAgent-inspired orchestration workflows. Review diffs, manage agents, run dev servers, and keep the big picture while your AI codes.
 
-![OpenChamber Chat](docs/references/chat_example.png)
+![Oh My OpenChamber Chat](docs/references/chat_example.png)
 
 <details>
 <summary>More screenshots</summary>
@@ -28,11 +28,19 @@
 
 </details>
 
-## Why use OpenChamber?
+## Why use Oh My OpenChamber?
 
 - **Cross-device continuity**: Start in TUI, continue on tablet/phone, return to terminal - same session
 - **Remote access**: Use OpenCode from anywhere via browser
 - **Familiarity**: A visual alternative for developers who prefer GUI workflows
+
+## What's new in Oh My OpenChamber
+
+- **Runtime-managed provider discovery**: Ollama and LiteLLM now load through a canonical provider-model path, so saved credentials flow straight into model search without relying on stale UI state.
+- **Explicit provider states**: Runtime-managed providers surface `discovering`, `ready`, `empty`, and `error` states so the settings UI can explain whether model loading is still in progress, succeeded, or needs attention.
+- **Safer agent selection policy**: Main chat agent selection is now restricted to main agents only, preventing internal subagents from becoming the active default or current chat agent.
+- **Expanded OMO agent catalog**: The built-in Oh My OpenAgent roster now includes Atlas, Sisyphus, Hephaestus, Prometheus, Sisyphus-Junior, Explore, Librarian, Metis, Momus, Oracle, and Multimodal-Looker with selector visibility aligned to their roles.
+- **Main branch parity improvements**: This branch also carries recent upstream improvements around sync stability, terminal output replay, desktop/runtime polish, and chat rendering fixes merged from `main`.
 
 ## Features
 
@@ -80,7 +88,7 @@
 - **Branchable chat timeline** - Undo, redo, fork from any turn. Explore different approaches without losing your place.
 - **GitHub-native workflows** - Start sessions from issues and PRs with context already attached. Review checks, merge - all in-app.
 - **Project Actions** - Run dev servers, configure SSH port forwarding, open remote URLs locally. Your project commands, one click away.
-- **Connect to remote machines** - Desktop app connects to remote OpenChamber instances over SSH, with dedicated lifecycle and UX flows.
+- **Connect to remote machines** - Desktop app connects to remote Oh My OpenChamber instances over SSH, with dedicated lifecycle and UX flows.
 
 ## Quick Start
 
@@ -137,12 +145,12 @@ OPENCHAMBER_OPENCODE_HOSTNAME=0.0.0.0 openchamber --port 3000
 <details>
 <summary>systemd service (VPN / LAN access)</summary>
 
-Run OpenChamber and OpenCode as separate persistent services — useful when you want to access your
+Run Oh My OpenChamber and OpenCode as separate persistent services — useful when you want to access your
 dev machine over a VPN (e.g. Tailscale) or LAN without a Cloudflare tunnel.
 
 **How it works:**
 - OpenCode runs as its own service, binding only to `localhost`.
-- OpenChamber connects to it via `OPENCODE_HOST` and `--host 0.0.0.0` makes it reachable on your VPN IP.
+- Oh My OpenChamber connects to it via `OPENCODE_HOST` and `--host 0.0.0.0` makes it reachable on your VPN IP.
 - `--foreground` keeps the CLI process alive so systemd can track and restart it.
 
 **`~/.config/systemd/user/opencode.service`**
@@ -172,7 +180,7 @@ WantedBy=default.target
 **`~/.config/systemd/user/openchamber.service`**
 ```ini
 [Unit]
-Description=OpenChamber Web Server
+Description=Oh My OpenChamber Web Server
 After=opencode.service
 
 [Service]
@@ -192,7 +200,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now opencode openchamber
 ```
 
-OpenChamber will be reachable at `http://<your-vpn-hostname>:3000` from any device on your VPN.
+Oh My OpenChamber will be reachable at `http://<your-vpn-hostname>:3000` from any device on your VPN.
 
 > **Note:** `--host 0.0.0.0` is required to listen on all interfaces. The default
 > bind address is `127.0.0.1` (localhost only). Use `--host <ip>` or
@@ -243,7 +251,7 @@ Managed-local path note: `OPENCHAMBER_TUNNEL_CONFIG` must point to a path inside
 
 ### Tunnel behavior notes
 
-- OpenChamber supports one active tunnel per running instance (port).
+- Oh My OpenChamber supports one active tunnel per running instance (port).
 - Starting a tunnel with a different mode/provider on the same instance replaces the current tunnel.
 - Replacing or stopping a tunnel revokes existing connect links and invalidates remote tunnel sessions for that instance.
 - Connect links are one-time tokens; generating a new link revokes the previous unused link.
@@ -314,7 +322,7 @@ chown -R 1000:1000 data/
 <details>
 <summary><strong>Desktop (macOS)</strong></summary>
 
-- Connect to remote OpenChamber instances over SSH with dedicated lifecycle flows
+- Connect to remote Oh My OpenChamber instances over SSH with dedicated lifecycle flows
 - Project Actions: run dev servers, SSH port forwarding, open remote URLs locally
 - Multi-window support for parallel project workflows
 - "Open In" shortcuts for Finder, Terminal, and your preferred editor
@@ -379,6 +387,7 @@ Independent project, not affiliated with the OpenCode team.
 **Special thanks to:**
 
 - [OpenCode](https://opencode.ai) - For the excellent API and extensible architecture.
+- [Oh My OpenAgent](https://github.com/code-yeongyu/oh-my-openagent) - For the orchestration concepts and agent lineup that inspired the expanded OMO workflow surface in Oh My OpenChamber.
 - [Flexoki](https://github.com/kepano/flexoki) - Beautiful color scheme by [Steph Ango](https://stephango.com/flexoki).
 - [Pierre](https://pierrejs-docs.vercel.app/) - Fast, beautiful diff viewer with syntax highlighting.
 - [Tauri](https://github.com/tauri-apps/tauri) - Desktop application framework.
