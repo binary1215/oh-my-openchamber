@@ -12,11 +12,12 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { useOptionalThemeSystem } from '@/contexts/useThemeSystem';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
-import { useSessionMessageRecords } from '@/sync/sync-context';
-import { getSyncChildStores, getSyncDirectory } from '@/sync/sync-refs';
+import { useDirectorySync, useSessionMessageRecords } from '@/sync/sync-context';
+import { getSyncChildStores } from '@/sync/sync-refs';
 import { useUIStore } from '@/stores/useUIStore';
 import { useSessionActivity } from '@/hooks/useSessionActivity';
 import { opencodeClient } from '@/lib/opencode/client';
+import { sessionEvents } from '@/lib/sessionEvents';
 import { ScrollShadow } from '@/components/ui/ScrollShadow';
 import { Text } from '@/components/ui/text';
 import { FileTypeIcon } from '@/components/icons/FileTypeIcon';
@@ -30,12 +31,15 @@ import {
     formatEditOutput,
     detectLanguageFromOutput,
     formatInputForDisplay,
+    tryParseJsonOutput,
 } from '../toolRenderers';
+import { JsonTreeViewer } from '@/components/ui/JsonTreeViewer';
 import { DiffViewToggle, type DiffViewMode } from '../DiffViewToggle';
 import { MinDurationShineText } from './MinDurationShineText';
 import { ToolRevealOnMount } from './ToolRevealOnMount';
 import { getToolIcon } from './toolPresentation';
 import { useDurationTickerNow } from './useDurationTicker';
+import { resolveFallbackTaskSessionId } from './resolveFallbackTaskSessionId';
 
 type ToolStateWithMetadata = ToolStateUnion & { metadata?: Record<string, unknown>; input?: Record<string, unknown>; output?: string; error?: string; time?: { start: number; end?: number } };
 
@@ -156,6 +160,14 @@ const TASK_TOOL_ACTIVE_FETCH_LIMIT = 160;
 const TASK_TOOL_IDLE_FETCH_LIMIT = 80;
 const TASK_TOOL_NO_CHANGE_BACKOFF_AFTER_POLLS = 3;
 const TASK_TOOL_SETTLE_GRACE_MS = 2500;
+const GIT_REFRESH_MUTATING_TOOLS = new Set([
+    'bash',
+    'edit',
+    'write',
+    'apply_patch',
+    'patch',
+    'task',
+]);
 
 const formatDuration = (start: number, end?: number, now: number = Date.now()) => {
     const duration = Math.min(Math.max(0, (end ?? now) - start), MAX_DURATION_MS);
@@ -534,6 +546,19 @@ const ToolScrollableTextOutput: React.FC<{
 }> = ({ output, part, metadata, input, syntaxTheme }) => {
     const renderedOutput = getToolOutputText(output, part, metadata);
     const outputLanguage = getToolOutputLanguage(output, part, metadata, input);
+    const jsonResult = React.useMemo(() => tryParseJsonOutput(renderedOutput), [renderedOutput]);
+
+    if (jsonResult.isJson) {
+        return (
+            <div className="tool-output-surface p-2 rounded-xl w-full min-w-0">
+                <JsonTreeViewer
+                    data={jsonResult.data}
+                    initiallyExpandedDepth={1}
+                    maxHeight="400px"
+                />
+            </div>
+        );
+    }
 
     return (
         <div className={part.tool === 'bash' ? 'typography-code text-muted-foreground/90' : undefined}>
@@ -1546,6 +1571,7 @@ const ToolPart: React.FC<ToolPartProps> = ({
     const state = part.state;
     const showToolFileIcons = useUIStore((s) => s.showToolFileIcons);
     const currentDirectory = useDirectoryStore((s) => s.currentDirectory);
+    const currentSessionId = useSessionUIStore((s) => s.currentSessionId);
 
     const normalizedPartTool = normalizeToolName(part.tool);
     const isTaskTool = normalizedPartTool === 'task';
@@ -1556,12 +1582,14 @@ const ToolPart: React.FC<ToolPartProps> = ({
 
     const [activeLatched, setActiveLatched] = React.useState<boolean>(!isFinalized);
     const previousPartIdRef = React.useRef<string | undefined>(part.id);
+    const lastGitRefreshSignatureRef = React.useRef<string>('');
 
     React.useEffect(() => {
         if (previousPartIdRef.current === part.id) {
             return;
         }
         previousPartIdRef.current = part.id;
+        lastGitRefreshSignatureRef.current = '';
         // Reset latch only when tool identity changes.
         setActiveLatched(!isFinalized);
     }, [isFinalized, part.id]);
@@ -1571,6 +1599,22 @@ const ToolPart: React.FC<ToolPartProps> = ({
             setActiveLatched(true);
         }
     }, [isFinalized]);
+
+    React.useEffect(() => {
+        if (!isFinalized || isError || !currentDirectory) {
+            return;
+        }
+        if (!GIT_REFRESH_MUTATING_TOOLS.has(normalizedPartTool)) {
+            return;
+        }
+
+        const signature = `${part.id}:${status ?? 'unknown'}`;
+        if (lastGitRefreshSignatureRef.current === signature) {
+            return;
+        }
+        lastGitRefreshSignatureRef.current = signature;
+        sessionEvents.requestGitRefresh({ directory: currentDirectory });
+    }, [currentDirectory, isError, isFinalized, normalizedPartTool, part.id, status]);
 
 
 
@@ -1645,6 +1689,16 @@ const ToolPart: React.FC<ToolPartProps> = ({
         return Math.min(...candidates);
     }, [localStartAt, pinnedTime.start, time?.start]);
 
+    const taskSessionResolutionStart = React.useMemo(() => {
+        if (typeof pinnedTime.start === 'number') {
+            return pinnedTime.start;
+        }
+        if (typeof time?.start === 'number') {
+            return time.start;
+        }
+        return localStartAt;
+    }, [localStartAt, pinnedTime.start, time?.start]);
+
     const taskOutputString = React.useMemo(() => {
         return typeof stateWithData.output === 'string' ? stateWithData.output : undefined;
     }, [stateWithData.output]);
@@ -1653,7 +1707,7 @@ const ToolPart: React.FC<ToolPartProps> = ({
         return parseTaskMetadataBlock(taskOutputString);
     }, [taskOutputString]);
 
-    const taskSessionId = React.useMemo<string | undefined>(() => {
+    const explicitTaskSessionId = React.useMemo<string | undefined>(() => {
         if (!isTaskTool) {
             return undefined;
         }
@@ -1674,7 +1728,27 @@ const ToolPart: React.FC<ToolPartProps> = ({
         return readTaskSessionIdFromOutput(taskOutputString);
     }, [isTaskTool, metadata, parsedTaskMetadata.sessionId, partMetadata, taskOutputString]);
 
-    const childSessionMessages = useSessionMessageRecords(taskSessionId ?? '');
+    const fallbackTaskSessionId = useDirectorySync(
+        React.useCallback((storeState) => {
+            if (explicitTaskSessionId) {
+                return undefined;
+            }
+
+            return resolveFallbackTaskSessionId({
+                isTaskTool,
+                parentSessionId: currentSessionId ?? undefined,
+                taskStartTime: taskSessionResolutionStart,
+                isTaskFinalized: isFinalized,
+                sessions: storeState.session,
+                sessionStatusMap: storeState.session_status,
+            });
+        }, [explicitTaskSessionId, isTaskTool, currentSessionId, taskSessionResolutionStart, isFinalized]),
+        currentDirectory,
+    );
+
+    const taskSessionId = explicitTaskSessionId ?? fallbackTaskSessionId;
+
+    const childSessionMessages = useSessionMessageRecords(taskSessionId ?? '', currentDirectory);
 
     const metadataTaskSummaryEntries = React.useMemo<TaskToolSummaryEntry[]>(() => {
         if (!isTaskTool) {
@@ -1729,7 +1803,7 @@ const ToolPart: React.FC<ToolPartProps> = ({
         return false;
     }, [childSessionMessages, isTaskTool, taskSessionId]);
 
-    const childSessionActivity = useSessionActivity(taskSessionId);
+    const childSessionActivity = useSessionActivity(taskSessionId, currentDirectory);
     const [taskChildSeenActive, setTaskChildSeenActive] = React.useState(false);
     const [taskChildPollingStopped, setTaskChildPollingStopped] = React.useState(false);
 
@@ -1881,7 +1955,12 @@ const ToolPart: React.FC<ToolPartProps> = ({
 
         const fetchSessionMessages = async (isInitialFetch: boolean) => {
             try {
-                const messages = await opencodeClient.getSessionMessages(taskSessionId, resolveFetchLimit(isInitialFetch));
+                const scopedClient = opencodeClient.getScopedSdkClient(currentDirectory);
+                const response = await scopedClient.session.messages({
+                    sessionID: taskSessionId,
+                    limit: resolveFetchLimit(isInitialFetch),
+                });
+                const messages = response.data ?? [];
                 if (cancelled || !Array.isArray(messages) || messages.length === 0) {
                     return;
                 }
@@ -1896,8 +1975,7 @@ const ToolPart: React.FC<ToolPartProps> = ({
                 taskPollNoChangeCountRef.current = 0;
                 // Inject fetched subagent messages into sync child store
                 const childStores = getSyncChildStores();
-                const dir = getSyncDirectory();
-                childStores.update(dir, (prev) => {
+                childStores.update(currentDirectory, (prev) => {
                     const records = messages as SessionMessageWithParts[];
                     const partPatch: Record<string, import('@opencode-ai/sdk/v2').Part[]> = { ...prev.part };
                     for (const rec of records) {
@@ -1927,6 +2005,7 @@ const ToolPart: React.FC<ToolPartProps> = ({
         childSessionActivity.phase,
         childSessionHasInFlightTools,
         childSessionTaskSummaryEntries.length,
+        currentDirectory,
         isActive,
         isTaskTool,
         taskChildPollingStopped,

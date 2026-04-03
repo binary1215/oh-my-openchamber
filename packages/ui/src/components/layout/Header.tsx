@@ -27,8 +27,9 @@ import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { useFilesViewTabsStore } from '@/stores/useFilesViewTabsStore';
-import { useGitStore } from '@/stores/useGitStore';
-import { useGitHubPrStatusStore } from '@/stores/useGitHubPrStatusStore';
+import { useGitBranchLabel } from '@/stores/useGitStore';
+import { useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
+import { useFeatureFlagsStore } from '@/stores/useFeatureFlagsStore';
 
 import { useGitHubAuthStore } from '@/stores/useGitHubAuthStore';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
@@ -57,7 +58,7 @@ import {
 } from '@/components/ui/collapsible';
 import { RiArrowDownSLine, RiArrowRightSLine } from '@remixicon/react';
 import type { UsageWindow } from '@/types';
-import type { GitHubAuthStatus, GitHubPullRequestStatus } from '@/lib/api/types';
+import type { GitHubAuthStatus } from '@/lib/api/types';
 import type { SessionContextUsage } from '@/stores/types/sessionTypes';
 import { DesktopHostSwitcherDialog } from '@/components/desktop/DesktopHostSwitcher';
 import { OpenInAppButton } from '@/components/desktop/OpenInAppButton';
@@ -65,6 +66,7 @@ import { ProjectActionsButton } from '@/components/layout/ProjectActionsButton';
 import { isDesktopShell, isVSCodeRuntime } from '@/lib/desktop';
 import { desktopHostsGet, locationMatchesHost, redactSensitiveUrl } from '@/lib/desktopHosts';
 import { resolveSessionDiffStats } from '@/components/session/sidebar/utils';
+import type { Session } from '@opencode-ai/sdk/v2/client';
 
 
 const isSameContextUsage = (
@@ -81,48 +83,6 @@ const isSameContextUsage = (
     && (a.normalizedOutput ?? 0) === (b.normalizedOutput ?? 0)
     && a.thresholdLimit === b.thresholdLimit
     && (a.lastMessageId ?? '') === (b.lastMessageId ?? '');
-};
-
-type PrVisualState = 'draft' | 'open' | 'blocked' | 'merged' | 'closed';
-
-const getPrVisualState = (status: GitHubPullRequestStatus | null): PrVisualState | null => {
-  const pr = status?.pr;
-  if (!pr) {
-    return null;
-  }
-  if (pr.state === 'merged') {
-    return 'merged';
-  }
-  if (pr.state === 'closed') {
-    return 'closed';
-  }
-  if (pr.draft) {
-    return 'draft';
-  }
-  const checksFailed = status?.checks?.state === 'failure';
-  const mergeableState = typeof pr.mergeableState === 'string' ? pr.mergeableState : '';
-  const notMergeable = pr.mergeable === false || mergeableState === 'blocked' || mergeableState === 'dirty';
-  if (checksFailed || notMergeable) {
-    return 'blocked';
-  }
-  return 'open';
-};
-
-const getPrVisualPriority = (state: PrVisualState): number => {
-  switch (state) {
-    case 'open':
-      return 5;
-    case 'blocked':
-      return 4;
-    case 'draft':
-      return 3;
-    case 'merged':
-      return 2;
-    case 'closed':
-      return 1;
-    default:
-      return 0;
-  }
 };
 
 const formatCompactHeaderLabel = (value: string): string => {
@@ -250,6 +210,7 @@ export const Header: React.FC<HeaderProps> = ({
   const currentSessionMessageRecords = useSessionMessageRecords(currentSessionId ?? '');
   const currentSessionMessages = currentSessionId ? (currentSessionMessageRecords.length > 0 ? currentSessionMessageRecords : undefined) : undefined;
   const sessions = useSessions();
+  const globalActiveSessions = useGlobalSessionsStore((state) => state.activeSessions);
   const activeProject = useProjectsStore((state) => {
     if (!state.activeProjectId) {
       return null;
@@ -561,16 +522,82 @@ export const Header: React.FC<HeaderProps> = ({
     });
   }, [fetchAllQuotas, isUsageRefreshSpinning]);
 
-  const currentSession = React.useMemo(() => {
+  const currentSessionLive = React.useMemo(() => {
     if (!currentSessionId) return null;
-    // Try current directory's store first, then fall back to all child stores.
-    // The sidebar loads sessions globally via SDK, but the header uses
-    // useSessions() which only has the current directory. This fallback
-    // ensures the title/directory show when the session lives elsewhere.
-    return sessions.find((s) => s.id === currentSessionId)
+    // Resolve from the global sessions snapshot first (same source as sidebar).
+    // Child-store lists are intentionally partial/truncated during bootstrap.
+    return globalActiveSessions.find((s) => s.id === currentSessionId)
+      ?? sessions.find((s) => s.id === currentSessionId)
       ?? getAllSyncSessions().find((s) => s.id === currentSessionId)
       ?? null;
-  }, [currentSessionId, sessions]);
+  }, [currentSessionId, globalActiveSessions, sessions]);
+
+  const lastResolvedSessionRef = React.useRef<{
+    sessionId: string;
+    session: Session;
+    expiresAt: number;
+  } | null>(null);
+  const [sessionFallbackVersion, setSessionFallbackVersion] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!currentSessionId) {
+      if (lastResolvedSessionRef.current) {
+        lastResolvedSessionRef.current = null;
+        setSessionFallbackVersion((value) => value + 1);
+      }
+      return;
+    }
+
+    if (currentSessionLive) {
+      lastResolvedSessionRef.current = {
+        sessionId: currentSessionId,
+        session: currentSessionLive,
+        expiresAt: Date.now() + 2000,
+      };
+      return;
+    }
+
+    const cached = lastResolvedSessionRef.current;
+    if (!cached || cached.sessionId !== currentSessionId) {
+      return;
+    }
+
+    const remainingMs = cached.expiresAt - Date.now();
+    if (remainingMs <= 0) {
+      lastResolvedSessionRef.current = null;
+      setSessionFallbackVersion((value) => value + 1);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (lastResolvedSessionRef.current?.sessionId === currentSessionId) {
+        lastResolvedSessionRef.current = null;
+      }
+      setSessionFallbackVersion((value) => value + 1);
+    }, remainingMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [currentSessionId, currentSessionLive]);
+
+  void sessionFallbackVersion;
+  const currentSession = (() => {
+    if (currentSessionLive) {
+      return currentSessionLive;
+    }
+
+    if (!currentSessionId) {
+      return null;
+    }
+
+    const cached = lastResolvedSessionRef.current;
+    if (cached && cached.sessionId === currentSessionId && cached.expiresAt > Date.now()) {
+      return cached.session;
+    }
+
+    return null;
+  })();
 
   const worktreePath = useSessionUIStore((state) => {
     if (!currentSessionId) return '';
@@ -580,9 +607,6 @@ export const Header: React.FC<HeaderProps> = ({
     if (!currentSessionId) return null;
     return state.worktreeMetadata.get(currentSessionId)?.branch?.trim() ?? null;
   });
-  const gitDirectories = useGitStore((state) => state.directories);
-  const prStatusEntries = useGitHubPrStatusStore((state) => state.entries);
-
   const worktreeDirectory = React.useMemo(() => {
     return normalize(worktreePath || '');
   }, [worktreePath]);
@@ -603,6 +627,26 @@ export const Header: React.FC<HeaderProps> = ({
     return worktreeDirectory || sessionDirectory || draftDirectory;
   }, [draftDirectory, sessionDirectory, worktreeDirectory]);
 
+  const catalogWorktreeBranch = useSessionUIStore((state) => {
+    const candidateDirectory = normalize(worktreeDirectory || sessionDirectory || '');
+    if (!candidateDirectory) {
+      return null;
+    }
+
+    for (const worktrees of state.availableWorktreesByProject.values()) {
+      const match = worktrees.find((worktree) => normalize(worktree.path) === candidateDirectory);
+      const branch = match?.branch?.trim();
+      if (branch) {
+        return branch;
+      }
+    }
+
+    return null;
+  });
+
+  const gitBranchForDirectory = useGitBranchLabel(openDirectory || null);
+  const currentBranchLabel = gitBranchForDirectory || currentSessionWorktreeBranch || catalogWorktreeBranch;
+
   const currentSessionTitle = React.useMemo(() => {
     if (!currentSessionId) {
       return activeProjectLabel ?? 'OpenChamber';
@@ -614,78 +658,6 @@ export const Header: React.FC<HeaderProps> = ({
   const currentSessionDiffStats = React.useMemo(() => {
     return resolveSessionDiffStats(currentSession?.summary as Parameters<typeof resolveSessionDiffStats>[0]);
   }, [currentSession?.summary]);
-
-  const currentBranchLabel = React.useMemo(() => {
-    const directory = normalize(openDirectory || '');
-    if (directory) {
-      const gitBranch = gitDirectories.get(directory)?.status?.current?.trim();
-      if (gitBranch) {
-        return gitBranch;
-      }
-    }
-    return currentSessionWorktreeBranch;
-  }, [currentSessionWorktreeBranch, gitDirectories, openDirectory]);
-
-  const currentSessionPr = React.useMemo(() => {
-    const directory = normalize(openDirectory || '');
-    const branch = currentBranchLabel?.trim();
-    if (!directory || !branch) {
-      return null;
-    }
-
-    let bestMatch: { visualState: PrVisualState; number: number; canMerge: boolean | null; checksState: string | null } | null = null;
-    const prEntries = Object.values(prStatusEntries);
-    for (const entry of prEntries) {
-      const entryDirectory = normalize(entry.params?.directory ?? entry.identity?.directory ?? '');
-      const entryBranch = entry.params?.branch?.trim() ?? entry.identity?.branch?.trim() ?? '';
-      if (!entryDirectory || !entryBranch || entryDirectory !== directory || entryBranch !== branch) {
-        continue;
-      }
-
-      const visualState = getPrVisualState(entry.status ?? null);
-      const number = entry.status?.pr?.number;
-      if (!visualState || !number) {
-        continue;
-      }
-
-      const next = {
-        visualState,
-        number,
-        canMerge: typeof entry.status?.canMerge === 'boolean' ? entry.status.canMerge : null,
-        checksState: entry.status?.checks?.state ?? null,
-      };
-
-      if (!bestMatch || getPrVisualPriority(next.visualState) > getPrVisualPriority(bestMatch.visualState)) {
-        bestMatch = next;
-      }
-    }
-
-    return bestMatch;
-  }, [currentBranchLabel, openDirectory, prStatusEntries]);
-
-  const currentSessionPrLabel = React.useMemo(() => {
-    if (!currentSessionPr) {
-      return null;
-    }
-
-    switch (currentSessionPr.visualState) {
-      case 'merged':
-        return `PR #${currentSessionPr.number} merged`;
-      case 'closed':
-        return `PR #${currentSessionPr.number} closed`;
-      case 'draft':
-        return `PR #${currentSessionPr.number} draft`;
-      case 'blocked':
-        return `PR #${currentSessionPr.number} blocked`;
-      case 'open':
-        if (currentSessionPr.canMerge === true || currentSessionPr.checksState === 'success') {
-          return `PR #${currentSessionPr.number} ready`;
-        }
-        return `PR #${currentSessionPr.number} open`;
-      default:
-        return null;
-    }
-  }, [currentSessionPr]);
 
   const currentSessionChanges = React.useMemo(() => {
     if (currentSessionDiffStats) {
@@ -738,7 +710,8 @@ export const Header: React.FC<HeaderProps> = ({
 
 
   const [planTabAvailable, setPlanTabAvailable] = React.useState(false);
-  const showPlanTab = planTabAvailable;
+  const planModeEnabled = useFeatureFlagsStore((state) => state.planModeEnabled);
+  const showPlanTab = planModeEnabled && planTabAvailable;
   const lastPlanSessionKeyRef = React.useRef<string>('');
 
   const handleGitHubAccountSwitch = React.useCallback(async (accountId: string) => {
@@ -774,6 +747,14 @@ export const Header: React.FC<HeaderProps> = ({
   }, [isSwitchingGitHubAccount, runtimeApis.github, setGitHubAuthStatus]);
 
   React.useEffect(() => {
+    if (!planModeEnabled) {
+      setPlanTabAvailable(false);
+      if (useUIStore.getState().activeMainTab === 'plan') {
+        useUIStore.getState().setActiveMainTab('chat');
+      }
+      return;
+    }
+
     let cancelled = false;
 
     const checkExists = async (directory: string, fileName: string): Promise<boolean> => {
@@ -834,6 +815,7 @@ export const Header: React.FC<HeaderProps> = ({
       window.clearInterval(interval);
     };
   }, [
+    planModeEnabled,
     sessionDirectory,
     currentSession?.slug,
     currentSession?.time?.created,
@@ -1722,7 +1704,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="truncate pl-1 typography-ui-label text-[14px] font-normal leading-tight text-foreground">
               {currentSessionTitle}
             </div>
-            {(activeProjectLabel || currentBranchLabel || currentSessionPrLabel || hasNonZeroSessionChanges) ? (
+            {(activeProjectLabel || currentBranchLabel || hasNonZeroSessionChanges) ? (
               <div className="flex min-w-0 items-center gap-1.5 truncate pl-1 typography-micro text-[10.5px] font-normal leading-tight text-muted-foreground/75">
                 {activeProjectLabel ? <span className="truncate">{activeProjectLabel}</span> : null}
                 {currentBranchLabel ? (
@@ -1731,7 +1713,6 @@ export const Header: React.FC<HeaderProps> = ({
                     <span className="truncate">{currentBranchLabel}</span>
                   </span>
                 ) : null}
-                {currentSessionPrLabel ? <span className="truncate">{currentSessionPrLabel}</span> : null}
                 {hasNonZeroSessionChanges ? (
                   <span className="inline-flex flex-shrink-0 items-center gap-0 text-[0.92em]">
                     <span className="text-status-success/80">+{currentSessionChanges.additions}</span>
