@@ -280,6 +280,34 @@ describe('backend runtime integration', () => {
     expect(payload).toEqual({ projects: [] });
   });
 
+  it('keeps existing provider auth disconnect route response shape intact', async () => {
+    const baseDirectory = await createTempDirectory();
+    const runtimeBackend = createRuntimeBackend({ fsPromises, path, baseDirectory });
+
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, createOpenCodeRouteDependencies());
+    registerRuntimeRoutes(app, { runtimeBackend });
+
+    const server = http.createServer(app);
+    testServers.push(server);
+    const address = await listenOnEphemeralPort(server);
+    const baseUrl = `http://${address.host}:${address.port}`;
+
+    const response = await fetch(`${baseUrl}/api/provider/openai/auth?scope=auth`, {
+      method: 'DELETE',
+    });
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+
+    expect(payload).toEqual({
+      success: true,
+      removed: false,
+      requiresReload: false,
+      message: 'Provider was not connected',
+    });
+  });
+
   it('reports failed tool executions as failed tasks instead of completed tasks', async () => {
     const baseDirectory = await createTempDirectory();
     const runtimeBackend = createRuntimeBackend({

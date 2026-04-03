@@ -24,6 +24,47 @@ const REQUIRED_NON_PORTABLE_PATHS = Object.freeze([
   '[OA]/src/plugin-config.ts',
 ]);
 
+const EXPECTED_CLASSIFIED_SOURCE_SET = Object.freeze([
+  '[OA]/docs/guide/orchestration.md',
+  '[OA]/docs/reference/features.md',
+  '[OA]/docs/examples/default.jsonc',
+  '[OA]/docs/examples/planning-focused.jsonc',
+  '[OA]/src/agents/atlas/agent.ts',
+  '[OA]/src/agents/prometheus/**',
+  '[OA]/src/agents/sisyphus-junior/**',
+  '[OA]/src/agents/builtin-agents.ts',
+  '[OA]/src/tools/delegate-task/constants.ts',
+  '[OA]/src/tools/delegate-task/categories.ts',
+  '[OA]/src/features/boulder-state/**',
+  '[OA]/src/hooks/atlas/**',
+  '[OA]/src/hooks/todo-continuation-enforcer/**',
+  '[OA]/src/tools/session-manager/session-formatter.ts',
+  '[OA]/src/tools/session-manager/types.ts',
+  '[OA]/src/tools/delegate-task/tools.ts',
+  '[OA]/src/tools/delegate-task/executor.ts',
+  '[OA]/src/tools/delegate-task/prompt-builder.ts',
+  '[OA]/src/tools/delegate-task/sync-continuation.ts',
+  '[OA]/src/tools/delegate-task/background-continuation.ts',
+  '[OA]/src/tools/delegate-task/*task*',
+  '[OA]/src/tools/delegate-task/*poll*',
+  '[OA]/src/tools/delegate-task/*prompt*',
+  '[OA]/src/tools/call-omo-agent/tools.ts',
+  '[OA]/src/tools/session-manager/tools.ts',
+  '[OA]/src/features/background-agent/**',
+  '[OA]/src/features/task-toast-manager/**',
+  '[OA]/src/features/tool-metadata-store/**',
+  '[OA]/src/hooks/start-work/start-work-hook.ts',
+  '[OA]/src/plugin/hooks/create-continuation-hooks.ts',
+  '[OA]/src/index.ts',
+  '[OA]/src/plugin-interface.ts',
+  '[OA]/src/plugin/types.ts',
+  '[OA]/src/plugin-config.ts',
+  '[OA]/src/shared/plugin-identity.ts',
+  '[OA]/src/cli/**',
+  '[OA]/src/cli/run/server-connection.ts',
+  '[OA]/src/features/claude-code-*',
+]);
+
 describe('omo inventory', () => {
   it('includes required portable kernel specs', () => {
     expect(PORTABLE).toContain('[OA]/docs/guide/orchestration.md');
@@ -73,6 +114,13 @@ describe('omo inventory', () => {
     for (const requiredPath of REQUIRED_CLASSIFIED_PATHS) {
       expect(allPaths.has(requiredPath)).toBe(true);
     }
+  });
+
+  it('matches the authoritative classified source set exactly', () => {
+    const actual = [...OMO_KERNEL_ENTRIES.map((entry) => entry.path)].sort();
+    const expected = [...EXPECTED_CLASSIFIED_SOURCE_SET].sort();
+
+    expect(actual).toEqual(expected);
   });
 
   it('rejects non-portable glue from portable classification explicitly', () => {

@@ -37,7 +37,7 @@ export interface TaskRecord {
   taskID: string;
   runtimeID: string;
   createdAt: string;
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: TaskStatus;
   metadata: Record<string, unknown>;
 }
 
@@ -122,7 +122,32 @@ export declare const NEGOTIATION_OUTCOME: Readonly<{
   REFUSE: 'refuse';
 }>;
 
+export declare const TASK_STATUS: Readonly<{
+  QUEUED: 'queued';
+  RUNNING: 'running';
+  WAITING: 'waiting';
+  TOOL: 'tool';
+  BLOCKED: 'blocked';
+  COMPLETED: 'completed';
+  FAILED: 'failed';
+  CANCELLED: 'cancelled';
+}>;
+
+export type TaskStatus =
+  | 'queued'
+  | 'running'
+  | 'waiting'
+  | 'tool'
+  | 'blocked'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export declare const TASK_TRANSITION_RULES: Readonly<Record<TaskStatus, ReadonlyArray<TaskStatus>>>;
+
 export declare const RUNTIME_EVENT_TYPES: ReadonlyArray<RuntimeEventType>;
+
+export declare function canTransitionTaskStatus(fromStatus: unknown, toStatus: unknown): boolean;
 
 export declare function isRuntimeEventType(value: unknown): value is RuntimeEventType;
 
