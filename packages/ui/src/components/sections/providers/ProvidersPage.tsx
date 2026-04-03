@@ -31,6 +31,11 @@ type DisplayProvider = {
   supportsBaseUrl?: boolean;
 };
 
+const needsBaseUrlInput = (providerId: string, supportsBaseUrl?: boolean) => {
+  const normalized = providerId.trim().toLowerCase();
+  return normalized === 'ollama' || normalized === 'litellm' || supportsBaseUrl === true;
+};
+
 const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat('en-US', {
   notation: 'compact',
   compactDisplay: 'short',
@@ -625,7 +630,7 @@ export const ProvidersPage: React.FC = () => {
 
                     return (
                       <div className="py-1.5">
-                      {candidateOption?.supportsBaseUrl ? (
+                      {['ollama', 'litellm'].includes(candidateProviderId.trim().toLowerCase()) ? (
                         <>
                           <label className="typography-ui-label text-foreground flex items-center gap-1.5 mb-1.5">
                             Host / Endpoint
@@ -856,7 +861,7 @@ export const ProvidersPage: React.FC = () => {
                   </div>
                 ) : (
                 <div className="py-1.5">
-                  {selectedProvider.supportsBaseUrl ? (
+                  {['ollama', 'litellm'].includes(selectedProvider.id.trim().toLowerCase()) ? (
                     <>
                       <label className="typography-ui-label text-foreground flex items-center gap-1.5 mb-1.5">
                         Host / Endpoint
