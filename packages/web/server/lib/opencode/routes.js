@@ -214,6 +214,19 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       if (apiKey) nextAuth.apiKey = apiKey;
       if (baseURL) nextAuth.baseURL = baseURL;
 
+      if (RUNTIME_MANAGED_PROVIDERS[providerId]) {
+        try {
+          removeProviderConfig(providerId, null, 'user');
+        } catch {
+          // ignore cleanup failure and continue with auth save
+        }
+        try {
+          removeProviderConfig(providerId, null, 'custom');
+        } catch {
+          // ignore cleanup failure and continue with auth save
+        }
+      }
+
       const saved = upsertProviderAuth(providerId, nextAuth);
       await refreshOpenCodeAfterConfigChange(`provider ${providerId} auth saved`);
 
