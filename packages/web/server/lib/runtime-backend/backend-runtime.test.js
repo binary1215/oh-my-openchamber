@@ -591,6 +591,124 @@ describe('backend runtime integration', () => {
     }
   });
 
+  it('persists runtime-managed provider config when saving auth', async () => {
+    const upsertCalls = [];
+
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, {
+      ...createOpenCodeRouteDependencies(),
+      upsertProviderConfig: (providerID, workingDirectory, scope, providerConfig) => {
+        upsertCalls.push({ providerID, workingDirectory, scope, providerConfig });
+        return { providerId: providerID, scope, path: '/tmp/config.json' };
+      },
+      removeProviderConfig: () => {
+        throw new Error('removeProviderConfig should not be called for runtime-managed auth saves');
+      },
+    });
+
+    const server = http.createServer(app);
+    testServers.push(server);
+    const address = await listenOnEphemeralPort(server);
+    const baseUrl = `http://${address.host}:${address.port}`;
+
+    const response = await fetch(`${baseUrl}/api/auth/litellm`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'api',
+        key: 'secret',
+        baseURL: 'http://192.168.0.8:4000/v1',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(upsertCalls).toEqual([
+      {
+        providerID: 'litellm',
+        workingDirectory: null,
+        scope: 'user',
+        providerConfig: {
+          baseURL: 'http://192.168.0.8:4000/v1',
+        },
+      },
+    ]);
+  });
+
+  it('rehydrates missing runtime-managed provider config from saved auth during canonical provider load', async () => {
+    const upstreamApp = express();
+    upstreamApp.get('/config/providers', (_req, res) => {
+      res.json({ providers: [], default: {} });
+    });
+
+    const upstreamServer = http.createServer(upstreamApp);
+    testServers.push(upstreamServer);
+    const upstreamAddress = await listenOnEphemeralPort(upstreamServer);
+    const upstreamBaseUrl = `http://${upstreamAddress.host}:${upstreamAddress.port}`;
+
+    const upsertCalls = [];
+    const refreshCalls = [];
+
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, {
+      ...createOpenCodeRouteDependencies(),
+      buildOpenCodeUrl: (routePath) => `${upstreamBaseUrl}${routePath}`,
+      upsertProviderConfig: (providerID, workingDirectory, scope, providerConfig) => {
+        upsertCalls.push({ providerID, workingDirectory, scope, providerConfig });
+        return { providerId: providerID, scope, path: '/tmp/config.json' };
+      },
+      refreshOpenCodeAfterConfigChange: async (reason) => {
+        refreshCalls.push(reason);
+      },
+    });
+
+    const authModule = await import('../opencode/auth.js');
+    const authFilePath = authModule.AUTH_FILE;
+    let backup = null;
+
+    try {
+      backup = await fsPromises.readFile(authFilePath, 'utf8');
+    } catch {
+      backup = null;
+    }
+
+    try {
+      await fsPromises.mkdir(path.dirname(authFilePath), { recursive: true });
+      await fsPromises.writeFile(authFilePath, JSON.stringify({
+        litellm: {
+          apiKey: 'secret',
+          baseURL: 'http://192.168.0.8:4000/v1',
+        },
+      }), 'utf8');
+
+      const server = http.createServer(app);
+      testServers.push(server);
+      const address = await listenOnEphemeralPort(server);
+      const baseUrl = `http://${address.host}:${address.port}`;
+
+      const response = await fetch(`${baseUrl}/api/config/providers`);
+      expect(response.status).toBe(200);
+      expect(upsertCalls).toEqual([
+        {
+          providerID: 'litellm',
+          workingDirectory: null,
+          scope: 'user',
+          providerConfig: {
+            baseURL: 'http://192.168.0.8:4000/v1',
+          },
+        },
+      ]);
+      expect(refreshCalls).toEqual(['provider litellm config restored from auth']);
+    } finally {
+      if (backup === null) {
+        await fsPromises.rm(authFilePath, { force: true });
+      } else {
+        await fsPromises.writeFile(authFilePath, backup, 'utf8');
+      }
+    }
+  });
+
   it('classifies auth failures for runtime-managed discovery explicitly', async () => {
     const upstreamApp = express();
     upstreamApp.get('/config/providers', (_req, res) => {

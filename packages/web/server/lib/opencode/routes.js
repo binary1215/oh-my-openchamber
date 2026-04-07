@@ -35,6 +35,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       ]),
     ),
   );
+  const runtimeManagedConfigHydration = new Map();
 
   const normalizeProviderId = (entry) =>
     entry && typeof entry === 'object' ? entry.id || entry.providerID || entry.providerId : null;
@@ -92,6 +93,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
 
     for (const provider of Object.values(runtimeManagedProviderCatalog)) {
       const connectionState = await resolveProviderConnectionState(provider.id, req);
+      await ensureRuntimeManagedProviderConfig(provider.id, connectionState);
       const existingProvider = providerMap.get(provider.id);
       const baseProvider = existingProvider && typeof existingProvider === 'object'
         ? { ...existingProvider }
@@ -188,6 +190,45 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       sources,
       connected: authExists || Boolean(sources.user?.exists || sources.project?.exists || sources.custom?.exists),
     };
+  };
+
+  const ensureRuntimeManagedProviderConfig = async (providerId, connectionState) => {
+    const provider = runtimeManagedProviderCatalog[providerId];
+    if (!provider || !connectionState?.auth) {
+      return false;
+    }
+
+    const { sources, auth } = connectionState;
+    const hasConfigSource = Boolean(sources.user?.exists || sources.project?.exists || sources.custom?.exists);
+    if (hasConfigSource) {
+      return false;
+    }
+
+    if (runtimeManagedConfigHydration.has(providerId)) {
+      await runtimeManagedConfigHydration.get(providerId);
+      return true;
+    }
+
+    const hydrationPromise = (async () => {
+      upsertProviderConfig(providerId, null, 'user', {
+        ...provider.defaultConfig,
+        ...(typeof auth.baseURL === 'string' && auth.baseURL.trim() ? { baseURL: auth.baseURL.trim() } : {}),
+      });
+
+      if (sources.user) {
+        sources.user.exists = true;
+      }
+
+      await refreshOpenCodeAfterConfigChange(`provider ${providerId} config restored from auth`);
+    })();
+
+    runtimeManagedConfigHydration.set(providerId, hydrationPromise);
+    try {
+      await hydrationPromise;
+      return true;
+    } finally {
+      runtimeManagedConfigHydration.delete(providerId);
+    }
   };
 
   app.get('/api/config/providers', async (req, res) => {
@@ -336,17 +377,12 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       if (apiKey) nextAuth.apiKey = apiKey;
       if (baseURL) nextAuth.baseURL = baseURL;
 
-      if (runtimeManagedProviderCatalog[providerId]) {
-        try {
-          removeProviderConfig(providerId, null, 'user');
-        } catch {
-          // ignore cleanup failure and continue with auth save
-        }
-        try {
-          removeProviderConfig(providerId, null, 'custom');
-        } catch {
-          // ignore cleanup failure and continue with auth save
-        }
+      const runtimeManagedProvider = runtimeManagedProviderCatalog[providerId];
+      if (runtimeManagedProvider) {
+        upsertProviderConfig(providerId, null, 'user', {
+          ...runtimeManagedProvider.defaultConfig,
+          ...(baseURL ? { baseURL } : {}),
+        });
       }
 
       const saved = upsertProviderAuth(providerId, nextAuth);
