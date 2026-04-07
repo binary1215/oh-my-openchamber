@@ -192,15 +192,16 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     };
   };
 
-  const ensureRuntimeManagedProviderConfig = async (providerId, connectionState) => {
+  const ensureRuntimeManagedProviderConfig = async (providerId, connectionState, options = {}) => {
     const provider = runtimeManagedProviderCatalog[providerId];
     if (!provider || !connectionState?.auth) {
       return false;
     }
 
+    const force = options.force === true;
     const { sources, auth } = connectionState;
     const hasConfigSource = Boolean(sources.user?.exists || sources.project?.exists || sources.custom?.exists);
-    if (hasConfigSource) {
+    if (!force && hasConfigSource) {
       return false;
     }
 
@@ -231,11 +232,53 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     }
   };
 
+  const buildForwardHeaders = (req) => {
+    const headers = {
+      Accept: req.get?.('accept') || 'application/json',
+      ...getOpenCodeAuthHeaders(),
+    };
+
+    const contentType = req.get?.('content-type');
+    if (contentType) {
+      headers['Content-Type'] = contentType;
+    }
+
+    return headers;
+  };
+
   app.get('/api/config/providers', async (req, res) => {
     try {
       return res.json(await buildCanonicalProvidersPayload(req));
     } catch (error) {
       return res.status(500).json({ error: error.message || 'Failed to load canonical providers' });
+    }
+  });
+
+  app.post('/api/session/:sessionId/prompt_async', async (req, res, next) => {
+    try {
+      const providerId = typeof req.body?.model?.providerID === 'string' ? req.body.model.providerID : null;
+      if (providerId && runtimeManagedProviderCatalog[providerId]) {
+        const connectionState = await resolveProviderConnectionState(providerId, req);
+        await ensureRuntimeManagedProviderConfig(providerId, connectionState, { force: true });
+      }
+
+      const query = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+      const upstreamResponse = await fetch(buildOpenCodeUrl(`/session/${req.params.sessionId}/prompt_async${query}`), {
+        method: 'POST',
+        headers: buildForwardHeaders(req),
+        body: JSON.stringify(req.body ?? {}),
+      });
+
+      res.status(upstreamResponse.status);
+      const contentType = upstreamResponse.headers.get('content-type');
+      if (contentType) {
+        res.setHeader('Content-Type', contentType);
+      }
+
+      const responseText = await upstreamResponse.text();
+      return res.send(responseText);
+    } catch (error) {
+      return next(error);
     }
   });
 
