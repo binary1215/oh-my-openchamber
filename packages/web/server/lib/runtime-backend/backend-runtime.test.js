@@ -628,9 +628,7 @@ describe('backend runtime integration', () => {
         providerID: 'litellm',
         workingDirectory: null,
         scope: 'user',
-        providerConfig: {
-          baseURL: 'http://192.168.0.8:4000/v1',
-        },
+        providerConfig: {},
       },
     ]);
   });
@@ -694,9 +692,7 @@ describe('backend runtime integration', () => {
           providerID: 'litellm',
           workingDirectory: null,
           scope: 'user',
-          providerConfig: {
-            baseURL: 'http://192.168.0.8:4000/v1',
-          },
+          providerConfig: {},
         },
       ]);
       expect(refreshCalls).toEqual(['provider litellm config restored from auth']);

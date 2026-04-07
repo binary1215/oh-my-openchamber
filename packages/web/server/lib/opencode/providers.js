@@ -12,18 +12,14 @@ const RUNTIME_MANAGED_PROVIDERS = Object.freeze({
     name: 'Ollama',
     connectMode: 'api',
     supportsBaseUrl: true,
-    defaultConfig: Object.freeze({
-      baseURL: 'http://127.0.0.1:11434',
-    }),
+    defaultConfig: Object.freeze({}),
   }),
   litellm: Object.freeze({
     id: 'litellm',
     name: 'LiteLLM',
     connectMode: 'api',
     supportsBaseUrl: true,
-    defaultConfig: Object.freeze({
-      baseURL: 'http://127.0.0.1:4000',
-    }),
+    defaultConfig: Object.freeze({}),
   }),
 });
 

@@ -213,7 +213,6 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     const hydrationPromise = (async () => {
       upsertProviderConfig(providerId, null, 'user', {
         ...provider.defaultConfig,
-        ...(typeof auth.baseURL === 'string' && auth.baseURL.trim() ? { baseURL: auth.baseURL.trim() } : {}),
       });
 
       if (sources.user) {
@@ -424,7 +423,6 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       if (runtimeManagedProvider) {
         upsertProviderConfig(providerId, null, 'user', {
           ...runtimeManagedProvider.defaultConfig,
-          ...(baseURL ? { baseURL } : {}),
         });
       }
 
