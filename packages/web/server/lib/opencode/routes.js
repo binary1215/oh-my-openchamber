@@ -245,6 +245,28 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     return headers;
   };
 
+  const readPromptRequestBody = async (req) => {
+    if (req.body && typeof req.body === 'object') {
+      return req.body;
+    }
+
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+
+    if (chunks.length === 0) {
+      return {};
+    }
+
+    const raw = Buffer.concat(chunks).toString('utf8').trim();
+    if (!raw) {
+      return {};
+    }
+
+    return JSON.parse(raw);
+  };
+
   app.get('/api/config/providers', async (req, res) => {
     try {
       return res.json(await buildCanonicalProvidersPayload(req));
@@ -255,7 +277,8 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
 
   app.post('/api/session/:sessionId/prompt_async', async (req, res, next) => {
     try {
-      const providerId = typeof req.body?.model?.providerID === 'string' ? req.body.model.providerID : null;
+      const requestBody = await readPromptRequestBody(req);
+      const providerId = typeof requestBody?.model?.providerID === 'string' ? requestBody.model.providerID : null;
       if (providerId && runtimeManagedProviderCatalog[providerId]) {
         const connectionState = await resolveProviderConnectionState(providerId, req);
         await ensureRuntimeManagedProviderConfig(providerId, connectionState, { force: true });
@@ -265,7 +288,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       const upstreamResponse = await fetch(buildOpenCodeUrl(`/session/${req.params.sessionId}/prompt_async${query}`), {
         method: 'POST',
         headers: buildForwardHeaders(req),
-        body: JSON.stringify(req.body ?? {}),
+        body: JSON.stringify(requestBody),
       });
 
       res.status(upstreamResponse.status);
