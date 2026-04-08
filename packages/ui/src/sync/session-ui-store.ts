@@ -47,6 +47,7 @@ import {
 import { useInputStore, type SyntheticContextPart } from "./input-store"
 import { useSelectionStore } from "./selection-store"
 import { useViewportStore } from "./viewport-store"
+import { isSelectableMainAgent } from "@/stores/utils/agentCatalog"
 
 export type { AttachedFile }
 
@@ -782,12 +783,23 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
     const sessionAgentSelection = currentSessionId
       ? useSelectionStore.getState().getSessionAgentSelection(currentSessionId)
       : null
+    const loadedAgents = useConfigStore.getState().agents
+    const resolveSelectableAgent = (agentName?: string | null) => {
+      if (!agentName) return null
+      const candidate = loadedAgents.find((agent) => agent.name === agentName)
+      return isSelectableMainAgent(candidate) ? candidate.name : null
+    }
+    const validSessionAgentSelection = resolveSelectableAgent(sessionAgentSelection)
     const configAgentName = useConfigStore.getState().currentAgentName
-    const effectiveAgent = trimmedAgent || sessionAgentSelection || configAgentName || undefined
+    const validConfigAgentName = resolveSelectableAgent(configAgentName)
+    const validTrimmedAgent = resolveSelectableAgent(trimmedAgent)
+    const effectiveAgent = validTrimmedAgent || validSessionAgentSelection || validConfigAgentName || undefined
 
     if (currentSessionId && effectiveAgent) {
       useSelectionStore.getState().saveSessionAgentSelection(currentSessionId, effectiveAgent)
       useSelectionStore.getState().saveAgentModelVariantForSession(currentSessionId, effectiveAgent, providerID, modelID, variant)
+    } else if (currentSessionId && sessionAgentSelection && !validSessionAgentSelection) {
+      useSelectionStore.getState().saveSessionAgentSelection(currentSessionId, "build")
     }
 
     if (currentSessionId) {
