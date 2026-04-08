@@ -282,7 +282,17 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
 
   app.post('/api/session/:sessionId/prompt_async', async (req, res, next) => {
     try {
-      const requestBody = await readPromptRequestBody(req);
+      const parsedBody = req.body
+        && typeof req.body === 'object'
+        && Object.keys(req.body).length > 0
+          ? req.body
+          : null;
+      const parsedProviderId = typeof parsedBody?.model?.providerID === 'string' ? parsedBody.model.providerID : null;
+      if (!parsedProviderId || !runtimeManagedProviderCatalog[parsedProviderId]) {
+        return next();
+      }
+
+      const requestBody = parsedBody ?? await readPromptRequestBody(req);
       const providerId = typeof requestBody?.model?.providerID === 'string' ? requestBody.model.providerID : null;
       if (providerId && runtimeManagedProviderCatalog[providerId]) {
         const connectionState = await resolveProviderConnectionState(providerId, req, {
