@@ -1182,7 +1182,7 @@ export const useConfigStore = create<ConfigStore>()(
                             ]);
 
                             const safeAgents = Array.isArray(agents) ? agents : [];
-                            const mergedAgents = mergeOmoAgents(safeAgents);
+                            const mergedAgents = mergeOmoAgents(safeAgents, { injectMissing: false });
 
                             const providers = get().activeDirectoryKey === directoryKey
                                 ? get().providers

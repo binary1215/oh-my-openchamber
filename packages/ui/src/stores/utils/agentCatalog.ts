@@ -110,16 +110,28 @@ export const OMO_UI_AGENTS: readonly AgentWithExtras[] = Object.freeze([
   },
 ]);
 
-export const mergeOmoAgents = (agents: readonly Agent[]): AgentWithExtras[] => {
+export const mergeOmoAgents = (agents: readonly Agent[], options: { injectMissing?: boolean } = {}): AgentWithExtras[] => {
+  const injectMissing = options.injectMissing !== false;
   const byName = new Map<string, AgentWithExtras>();
 
   for (const agent of agents) {
     byName.set(agent.name, agent as AgentWithExtras);
   }
 
-  for (const agent of OMO_UI_AGENTS) {
-    if (!byName.has(agent.name)) {
-      byName.set(agent.name, { ...agent });
+  for (const omoAgent of OMO_UI_AGENTS) {
+    const existing = byName.get(omoAgent.name);
+    if (existing) {
+      byName.set(omoAgent.name, {
+        ...existing,
+        description: existing.description || omoAgent.description,
+        native: existing.native ?? omoAgent.native,
+        group: existing.group ?? omoAgent.group,
+      });
+      continue;
+    }
+
+    if (injectMissing) {
+      byName.set(omoAgent.name, { ...omoAgent });
     }
   }
 
