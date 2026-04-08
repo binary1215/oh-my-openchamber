@@ -705,6 +705,64 @@ describe('backend runtime integration', () => {
     }
   });
 
+  it('allows canonical provider load for direct repo paths outside registered projects', async () => {
+    const upstreamApp = express();
+    upstreamApp.get('/config/providers', (_req, res) => {
+      res.json({ providers: [], default: {} });
+    });
+
+    const upstreamServer = http.createServer(upstreamApp);
+    testServers.push(upstreamServer);
+    const upstreamAddress = await listenOnEphemeralPort(upstreamServer);
+    const upstreamBaseUrl = `http://${upstreamAddress.host}:${upstreamAddress.port}`;
+
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, {
+      ...createOpenCodeRouteDependencies(),
+      buildOpenCodeUrl: (routePath) => `${upstreamBaseUrl}${routePath}`,
+      resolveProjectDirectory: async () => ({ directory: null, error: 'Directory not found' }),
+    });
+
+    const authModule = await import('../opencode/auth.js');
+    const authFilePath = authModule.AUTH_FILE;
+    let backup = null;
+
+    try {
+      backup = await fsPromises.readFile(authFilePath, 'utf8');
+    } catch {
+      backup = null;
+    }
+
+    try {
+      await fsPromises.mkdir(path.dirname(authFilePath), { recursive: true });
+      await fsPromises.writeFile(authFilePath, JSON.stringify({
+        litellm: {
+          apiKey: 'secret',
+          baseURL: 'http://192.168.0.8:4000/v1',
+        },
+      }), 'utf8');
+
+      const server = http.createServer(app);
+      testServers.push(server);
+      const address = await listenOnEphemeralPort(server);
+      const baseUrl = `http://${address.host}:${address.port}`;
+
+      const response = await fetch(`${baseUrl}/api/config/providers?directory=${encodeURIComponent('/opt/openchamber')}`);
+      expect(response.status).toBe(200);
+      const payload = await response.json();
+      const provider = payload.providers.find((entry) => entry.id === 'litellm');
+      expect(provider).toBeDefined();
+      expect(provider.runtimeManaged).toBe(true);
+    } finally {
+      if (backup === null) {
+        await fsPromises.rm(authFilePath, { force: true });
+      } else {
+        await fsPromises.writeFile(authFilePath, backup, 'utf8');
+      }
+    }
+  });
+
   it('forwards prompt_async bodies and hydrates runtime-managed provider config', async () => {
     const upstreamBodies = [];
     const upstreamApp = express();
