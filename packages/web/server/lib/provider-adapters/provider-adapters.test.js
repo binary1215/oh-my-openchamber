@@ -53,7 +53,8 @@ describe('provider adapters', () => {
     const request = adapter.buildModelsListRequest();
 
     expect(adapter.capabilities.streamProtocol).toBe('openai_sse');
-    expect(request.path).toBe('/models');
+    expect(request.baseUrl).toBe('http://127.0.0.1:4000/v1/');
+    expect(request.path).toBe('models');
     expect(adapter.parseStream(LITELLM_COMPATIBLE_SSE_STREAM)).toHaveLength(1);
   });
 
@@ -67,7 +68,28 @@ describe('provider adapters', () => {
     });
 
     const request = adapter.buildModelsListRequest();
-    expect(request.baseUrl).toBe('http://127.0.0.1:4000');
+    expect(request.baseUrl).toBe('http://127.0.0.1:4000/v1/');
+  });
+
+  it('preserves custom LiteLLM /v1 base paths for discovery and inference requests', () => {
+    const adapter = createLiteLlmAdapter({
+      ...createDependencyStubs(),
+      getProviderAuth: () => ({ apiKey: 'test-api-key', baseURL: 'http://192.168.0.8:4000/v1' }),
+    });
+
+    expect(adapter.buildModelsListRequest()).toEqual({
+      method: 'GET',
+      baseUrl: 'http://192.168.0.8:4000/v1/',
+      path: 'models',
+      headers: {
+        Authorization: 'Bearer test-api-key',
+      },
+    });
+
+    expect(adapter.buildChatRequest({ model: 'gpt-5.4', messages: [] })).toMatchObject({
+      baseUrl: 'http://192.168.0.8:4000/v1/',
+      path: 'chat/completions',
+    });
   });
 
   it('normalizes native Ollama adapter behavior without OpenAI endpoint semantics', () => {

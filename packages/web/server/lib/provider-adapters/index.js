@@ -17,16 +17,23 @@ export const PROVIDER_ADAPTER_ERROR_CODE = Object.freeze({
 
 const DEFAULT_BASE_URL = Object.freeze({
   openai: 'https://api.openai.com',
-  litellm: 'http://127.0.0.1:4000',
+  litellm: 'http://127.0.0.1:4000/v1/',
   ollama: 'http://127.0.0.1:11434',
 });
 
-const normalizeBaseUrl = (value, fallback) => {
+const normalizeBaseUrl = (value, fallback, options = {}) => {
   const candidate = typeof value === 'string' ? value.trim() : '';
   const selected = candidate || fallback;
+  const preservePath = options.preservePath === true;
 
   try {
-    return new URL(selected).origin;
+    const normalized = new URL(selected);
+    if (preservePath) {
+      const pathname = normalized.pathname.endsWith('/') ? normalized.pathname : `${normalized.pathname}/`;
+      normalized.pathname = pathname;
+      return normalized.toString();
+    }
+    return normalized.origin;
   } catch {
     throw new Error(`Invalid provider base URL: ${JSON.stringify(selected)}`);
   }
@@ -198,10 +205,11 @@ const createOpenAiFamilyAdapter = ({ providerID, options = {}, endpointDefaults 
 
   const capability = normalizeCapabilityMatrix()[providerID];
   const resolveContext = createProviderContextResolver({ providerID, dependencies, options });
+  const resolveBaseUrlImpl = options.resolveBaseUrl ?? ((input, fallback) => normalizeBaseUrl(input, fallback));
 
   const resolveBaseUrl = () => {
     const context = resolveContext();
-    return normalizeBaseUrl(options.baseUrl || context.baseUrlFromAuth, DEFAULT_BASE_URL[providerID]);
+    return resolveBaseUrlImpl(options.baseUrl || context.baseUrlFromAuth, DEFAULT_BASE_URL[providerID]);
   };
 
   const resolveAuthHeaders = () => {
@@ -292,10 +300,14 @@ export function createOpenAiCompatibleAdapter(options = {}) {
 export function createLiteLlmAdapter(options = {}) {
   return createOpenAiFamilyAdapter({
     providerID: 'litellm',
-    options,
+    options: {
+      ...options,
+      baseUrl: options.baseUrl,
+      resolveBaseUrl: (input, fallback) => normalizeBaseUrl(input, fallback, { preservePath: true }),
+    },
     endpointDefaults: {
-      chat: '/chat/completions',
-      models: '/models',
+      chat: 'chat/completions',
+      models: 'models',
     },
   });
 }
