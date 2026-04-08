@@ -177,9 +177,9 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       directory = resolved.directory;
     } else if (requestedDirectory) {
       if (tolerateMissingDirectory) {
-        directory = null;
+        directory = requestedDirectory;
       } else {
-        throw new Error(resolved.error);
+        directory = requestedDirectory;
       }
     }
 
