@@ -164,7 +164,8 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     }
   };
 
-  const resolveProviderConnectionState = async (providerId, req) => {
+  const resolveProviderConnectionState = async (providerId, req, options = {}) => {
+    const tolerateMissingDirectory = options.tolerateMissingDirectory === true;
     const requestedDirectory =
       (typeof req.get === 'function' ? req.get('x-opencode-directory') : null) ||
       (Array.isArray(req.query?.directory) ? req.query.directory[0] : req.query?.directory) ||
@@ -175,7 +176,11 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     if (resolved.directory) {
       directory = resolved.directory;
     } else if (requestedDirectory) {
-      throw new Error(resolved.error);
+      if (tolerateMissingDirectory) {
+        directory = null;
+      } else {
+        throw new Error(resolved.error);
+      }
     }
 
     const sources = getProviderSources(providerId, directory).sources;
@@ -280,7 +285,9 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       const requestBody = await readPromptRequestBody(req);
       const providerId = typeof requestBody?.model?.providerID === 'string' ? requestBody.model.providerID : null;
       if (providerId && runtimeManagedProviderCatalog[providerId]) {
-        const connectionState = await resolveProviderConnectionState(providerId, req);
+        const connectionState = await resolveProviderConnectionState(providerId, req, {
+          tolerateMissingDirectory: true,
+        });
         await ensureRuntimeManagedProviderConfig(providerId, connectionState, { force: true });
       }
 

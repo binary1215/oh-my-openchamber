@@ -789,6 +789,90 @@ describe('backend runtime integration', () => {
     }
   });
 
+  it('does not fail prompt hydration when requested directory is missing', async () => {
+    const upstreamBodies = [];
+    const upstreamApp = express();
+    upstreamApp.use(express.json());
+    upstreamApp.post('/session/:sessionId/prompt_async', (req, res) => {
+      upstreamBodies.push(req.body);
+      res.status(204).end();
+    });
+
+    const upstreamServer = http.createServer(upstreamApp);
+    testServers.push(upstreamServer);
+    const upstreamAddress = await listenOnEphemeralPort(upstreamServer);
+    const upstreamBaseUrl = `http://${upstreamAddress.host}:${upstreamAddress.port}`;
+
+    const upsertCalls = [];
+
+    const app = express();
+    registerCommonRequestMiddleware(app, { express });
+    registerOpenCodeRoutes(app, {
+      ...createOpenCodeRouteDependencies(),
+      buildOpenCodeUrl: (routePath) => `${upstreamBaseUrl}${routePath}`,
+      upsertProviderConfig: (providerID, workingDirectory, scope, providerConfig) => {
+        upsertCalls.push({ providerID, workingDirectory, scope, providerConfig });
+        return { providerId: providerID, scope, path: '/tmp/config.json' };
+      },
+    });
+
+    const authModule = await import('../opencode/auth.js');
+    const authFilePath = authModule.AUTH_FILE;
+    let backup = null;
+
+    try {
+      backup = await fsPromises.readFile(authFilePath, 'utf8');
+    } catch {
+      backup = null;
+    }
+
+    try {
+      await fsPromises.mkdir(path.dirname(authFilePath), { recursive: true });
+      await fsPromises.writeFile(authFilePath, JSON.stringify({
+        litellm: {
+          apiKey: 'secret',
+          baseURL: 'http://192.168.0.8:4000/v1',
+        },
+      }), 'utf8');
+
+      const server = http.createServer(app);
+      testServers.push(server);
+      const address = await listenOnEphemeralPort(server);
+      const baseUrl = `http://${address.host}:${address.port}`;
+
+      const body = {
+        model: {
+          providerID: 'litellm',
+          modelID: 'gpt-5.4',
+        },
+        parts: [{ type: 'text', text: 'hello' }],
+      };
+
+      const response = await fetch(`${baseUrl}/api/session/session-1/prompt_async?directory=${encodeURIComponent('/definitely/missing/path')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      expect(response.status).toBe(204);
+      expect(upsertCalls).toEqual([
+        {
+          providerID: 'litellm',
+          workingDirectory: null,
+          scope: 'user',
+          providerConfig: {},
+        },
+      ]);
+      expect(upstreamBodies).toEqual([body]);
+    } finally {
+      if (backup === null) {
+        await fsPromises.rm(authFilePath, { force: true });
+      } else {
+        await fsPromises.writeFile(authFilePath, backup, 'utf8');
+      }
+    }
+  });
+
   it('classifies auth failures for runtime-managed discovery explicitly', async () => {
     const upstreamApp = express();
     upstreamApp.get('/config/providers', (_req, res) => {
