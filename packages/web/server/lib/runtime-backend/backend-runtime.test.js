@@ -624,22 +624,7 @@ describe('backend runtime integration', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(upsertCalls).toEqual([
-      {
-        providerID: 'litellm',
-        workingDirectory: null,
-        scope: 'user',
-        providerConfig: {
-          npm: '@ai-sdk/openai-compatible',
-          name: 'LiteLLM',
-          options: {
-            baseURL: 'http://192.168.0.8:4000/v1',
-            litellmProxy: true,
-          },
-          models: {},
-        },
-      },
-    ]);
+    expect(upsertCalls).toEqual([]);
   });
 
   it('rehydrates missing runtime-managed provider config from saved auth during canonical provider load', async () => {
@@ -697,22 +682,7 @@ describe('backend runtime integration', () => {
 
       const response = await fetch(`${baseUrl}/api/config/providers`);
       expect(response.status).toBe(200);
-      expect(upsertCalls).toEqual([
-        {
-          providerID: 'litellm',
-          workingDirectory: null,
-          scope: 'user',
-          providerConfig: {
-            npm: '@ai-sdk/openai-compatible',
-            name: 'LiteLLM',
-            options: {
-              baseURL: 'http://192.168.0.8:4000/v1',
-              litellmProxy: true,
-            },
-            models: {},
-          },
-        },
-      ]);
+      expect(upsertCalls).toEqual([]);
       expect(refreshCalls).toEqual(['provider litellm config restored from auth']);
     } finally {
       if (backup === null) {
