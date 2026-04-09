@@ -1,6 +1,10 @@
 import { invalidateProviderDiscovery, resolveRuntimeManagedDiscovery } from './provider-discovery.js';
 import { RUNTIME_MANAGED_PROVIDERS } from './providers.js';
 
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+
 export const registerOpenCodeRoutes = (app, dependencies) => {
   const {
     crypto,
@@ -66,6 +70,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     errorType,
     message,
   });
+  const OPENCODE_CONFIG_FILE = path.join(os.homedir(), '.config', 'opencode', 'opencode.json');
 
   const buildRuntimeManagedProviderConfig = ({ provider, auth, models = null, selectedModelId = null }) => {
     const normalizedModels = models && typeof models === 'object' ? models : Object.create(null);
@@ -92,9 +97,36 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       options: {
         ...(provider.configDescriptor.options || {}),
         ...(typeof auth?.baseURL === 'string' && auth.baseURL.trim() ? { baseURL: auth.baseURL.trim() } : {}),
+        ...(typeof auth?.apiKey === 'string' && auth.apiKey.trim() ? { apiKey: auth.apiKey.trim() } : {}),
+        ...(typeof auth?.key === 'string' && auth.key.trim() ? { apiKey: auth.key.trim() } : {}),
+        ...(typeof auth?.token === 'string' && auth.token.trim() ? { apiKey: auth.token.trim() } : {}),
       },
       models: configModels,
     };
+  };
+
+  const persistRuntimeManagedProviderConfig = ({ providerId, providerConfig }) => {
+    const configDir = path.dirname(OPENCODE_CONFIG_FILE);
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+
+    let current = {};
+    if (fs.existsSync(OPENCODE_CONFIG_FILE)) {
+      const raw = fs.readFileSync(OPENCODE_CONFIG_FILE, 'utf8').trim();
+      current = raw ? JSON.parse(raw) : {};
+    }
+
+    const next = {
+      ...current,
+      $schema: current.$schema || 'https://opencode.ai/config.json',
+      provider: {
+        ...(current.provider && typeof current.provider === 'object' ? current.provider : {}),
+        [providerId]: providerConfig,
+      },
+    };
+
+    fs.writeFileSync(OPENCODE_CONFIG_FILE, JSON.stringify(next, null, 2), 'utf8');
   };
 
   const inferDiscoveryMetadataFromModels = (provider) => {
@@ -246,10 +278,11 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     }
 
     const hydrationPromise = (async () => {
-      upsertProviderConfig(providerId, null, 'user', buildRuntimeManagedProviderConfig({
+      const providerConfig = buildRuntimeManagedProviderConfig({
         provider,
         auth,
-      }));
+      });
+      persistRuntimeManagedProviderConfig({ providerId, providerConfig });
 
       if (sources.user) {
         sources.user.exists = true;
@@ -331,11 +364,12 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
           tolerateMissingDirectory: true,
         });
         await ensureRuntimeManagedProviderConfig(providerId, connectionState, { force: true });
-        upsertProviderConfig(providerId, null, 'user', buildRuntimeManagedProviderConfig({
+        const providerConfig = buildRuntimeManagedProviderConfig({
           provider: runtimeManagedProviderCatalog[providerId],
           auth: connectionState.auth,
           selectedModelId: modelId,
-        }));
+        });
+        persistRuntimeManagedProviderConfig({ providerId, providerConfig });
         await refreshOpenCodeAfterConfigChange(`provider ${providerId} model ${modelId ?? 'unknown'} prepared for prompt`);
       }
 
@@ -499,10 +533,11 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
 
       const runtimeManagedProvider = runtimeManagedProviderCatalog[providerId];
       if (runtimeManagedProvider) {
-        upsertProviderConfig(providerId, null, 'user', buildRuntimeManagedProviderConfig({
+        const providerConfig = buildRuntimeManagedProviderConfig({
           provider: runtimeManagedProvider,
           auth: nextAuth,
-        }));
+        });
+        persistRuntimeManagedProviderConfig({ providerId, providerConfig });
       }
 
       const saved = upsertProviderAuth(providerId, nextAuth);
