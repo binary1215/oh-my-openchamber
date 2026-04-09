@@ -67,13 +67,14 @@ function routeMessage(params: {
   additionalParts?: Array<{ text: string; synthetic?: boolean; files?: Array<{ type: "file"; mime: string; url: string; filename: string }> }>
 }): Promise<void> {
   const sdk = opencodeClient.getSdkClient()
+  const runtimeAgent = params.agent === 'Sisyphus' ? 'build' : params.agent
 
   if (params.inputMode === "shell") {
     const dir = opencodeClient.getDirectory() || undefined
     return sdk.session.shell({
       sessionID: params.sessionId,
       directory: dir,
-      agent: params.agent,
+      agent: runtimeAgent,
       model: { providerID: params.providerID, modelID: params.modelID },
       command: params.content,
     }).then(() => {})
@@ -98,7 +99,7 @@ function routeMessage(params: {
         directory: dir,
         command: cmdName,
         arguments: tail.join(" "),
-        agent: params.agent,
+        agent: runtimeAgent,
         model: `${params.providerID}/${params.modelID}`,
         variant: params.variant,
         parts: params.files,
@@ -110,19 +111,19 @@ function routeMessage(params: {
   return optimisticSend({
     sessionId: params.sessionId,
     content: params.content,
-    providerID: params.providerID,
-    modelID: params.modelID,
-    agent: params.agent,
-    files: params.files,
-    send: (messageID) => opencodeClient.sendMessage({
-      id: params.sessionId,
       providerID: params.providerID,
       modelID: params.modelID,
-      text: params.content,
-      agent: params.agent,
-      variant: params.variant,
+      agent: runtimeAgent,
       files: params.files,
-      additionalParts: params.additionalParts,
+      send: (messageID) => opencodeClient.sendMessage({
+        id: params.sessionId,
+        providerID: params.providerID,
+        modelID: params.modelID,
+        text: params.content,
+        agent: runtimeAgent,
+        variant: params.variant,
+        files: params.files,
+        additionalParts: params.additionalParts,
       messageId: messageID,
     }).then(() => {}),
   })

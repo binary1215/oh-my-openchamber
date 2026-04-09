@@ -192,6 +192,13 @@ const CURRENCY_FORMATTER = new Intl.NumberFormat('en-US', {
 
 const ADD_PROVIDER_ID = '__add_provider__';
 
+const resolvePreferredDisplayAgent = (latestAgent?: string, savedAgent?: string | null) => {
+    if (savedAgent === 'Sisyphus' && latestAgent === 'build') {
+        return 'Sisyphus';
+    }
+    return latestAgent;
+};
+
 const formatTokens = (value?: number | null) => {
     if (typeof value !== 'number' || Number.isNaN(value)) {
         return '—';
@@ -685,24 +692,32 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
             return;
         }
 
-        if (latestLoadedUserChoice.agent && currentAgentName !== latestLoadedUserChoice.agent) {
-            setAgent(latestLoadedUserChoice.agent);
+        const savedSessionAgentName = currentSessionId
+            ? useSelectionStore.getState().getSessionAgentSelection(currentSessionId)
+            : null;
+        const preferredLatestAgent = resolvePreferredDisplayAgent(
+            latestLoadedUserChoice.agent,
+            savedSessionAgentName,
+        );
+
+        if (preferredLatestAgent && currentAgentName !== preferredLatestAgent) {
+            setAgent(preferredLatestAgent);
         }
 
         const applyResult = tryApplyModelSelection(
             latestLoadedUserChoice.providerID,
             latestLoadedUserChoice.modelID,
-            latestLoadedUserChoice.agent || currentAgentName || undefined,
+            preferredLatestAgent || currentAgentName || undefined,
         );
         if (applyResult !== 'applied') {
             return;
         }
 
-        if (latestLoadedUserChoice.agent) {
-            saveSessionAgentSelection(currentSessionId, latestLoadedUserChoice.agent);
+        if (preferredLatestAgent) {
+            saveSessionAgentSelection(currentSessionId, preferredLatestAgent);
             saveAgentModelVariantForSession(
                 currentSessionId,
-                latestLoadedUserChoice.agent,
+                preferredLatestAgent,
                 latestLoadedUserChoice.providerID,
                 latestLoadedUserChoice.modelID,
                 latestLoadedUserChoice.variant,
