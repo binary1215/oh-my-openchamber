@@ -65,6 +65,11 @@ type EmbeddedSessionChatConfig = {
   directory: string | null;
 };
 
+type QuerySessionConfig = {
+  sessionId: string;
+  directory: string | null;
+};
+
 type EmbeddedVisibilityPayload = {
   visible?: unknown;
 };
@@ -96,29 +101,55 @@ const readEmbeddedSessionChatConfig = (): EmbeddedSessionChatConfig | null => {
   };
 };
 
+const readQuerySessionConfig = (): QuerySessionConfig | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('ocPanel') === 'session-chat') {
+    return null;
+  }
+
+  const sessionIdRaw = params.get('session');
+  const sessionId = typeof sessionIdRaw === 'string' ? sessionIdRaw.trim() : '';
+  if (!sessionId) {
+    return null;
+  }
+
+  const directoryRaw = params.get('directory');
+  const directory = typeof directoryRaw === 'string' && directoryRaw.trim().length > 0
+    ? directoryRaw.trim()
+    : null;
+
+  return { sessionId, directory };
+};
+
 const EmbeddedSessionSelectionGate: React.FC<{
   embeddedSessionChat: EmbeddedSessionChatConfig | null;
+  querySession: QuerySessionConfig | null;
   isVSCodeRuntime: boolean;
-}> = ({ embeddedSessionChat, isVSCodeRuntime }) => {
+}> = ({ embeddedSessionChat, querySession, isVSCodeRuntime }) => {
   const sessions = useSessions();
   const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
   const setCurrentSession = useSessionUIStore((state) => state.setCurrentSession);
 
   React.useEffect(() => {
-    if (!embeddedSessionChat || isVSCodeRuntime) {
+    const target = embeddedSessionChat ?? querySession;
+    if (!target || isVSCodeRuntime) {
       return;
     }
 
-    if (currentSessionId === embeddedSessionChat.sessionId) {
+    if (currentSessionId === target.sessionId) {
       return;
     }
 
-    if (!sessions.some((session) => session.id === embeddedSessionChat.sessionId)) {
+    if (!sessions.some((session) => session.id === target.sessionId)) {
       return;
     }
 
-    void setCurrentSession(embeddedSessionChat.sessionId);
-  }, [currentSessionId, embeddedSessionChat, isVSCodeRuntime, sessions, setCurrentSession]);
+    void setCurrentSession(target.sessionId, target.directory);
+  }, [currentSessionId, embeddedSessionChat, querySession, isVSCodeRuntime, sessions, setCurrentSession]);
 
   return null;
 };
@@ -174,6 +205,7 @@ function App({ apis }: AppProps) {
   const setPlanModeEnabled = useFeatureFlagsStore((state) => state.setPlanModeEnabled);
   const appReadyDispatchedRef = React.useRef(false);
   const embeddedSessionChat = React.useMemo<EmbeddedSessionChatConfig | null>(() => readEmbeddedSessionChatConfig(), []);
+  const querySession = React.useMemo<QuerySessionConfig | null>(() => readQuerySessionConfig(), []);
   const embeddedBackgroundWorkEnabled = !embeddedSessionChat || isEmbeddedVisible;
 
   React.useEffect(() => {
@@ -526,7 +558,7 @@ function App({ apis }: AppProps) {
           <RuntimeAPIProvider apis={apis}>
             <TooltipProvider delayDuration={700} skipDelayDuration={150}>
               <div className="h-full text-foreground bg-background">
-                <EmbeddedSessionSelectionGate embeddedSessionChat={embeddedSessionChat} isVSCodeRuntime={isVSCodeRuntime} />
+                <EmbeddedSessionSelectionGate embeddedSessionChat={embeddedSessionChat} querySession={null} isVSCodeRuntime={isVSCodeRuntime} />
                 <SyncAppEffects embeddedBackgroundWorkEnabled={embeddedBackgroundWorkEnabled} />
                 <ChatView />
                 <Toaster />
@@ -590,6 +622,7 @@ function App({ apis }: AppProps) {
             <VoiceProvider>
               <TooltipProvider delayDuration={700} skipDelayDuration={150}>
                 <div className={isDesktopRuntime ? 'h-full text-foreground bg-transparent' : 'h-full text-foreground bg-background'}>
+                  <EmbeddedSessionSelectionGate embeddedSessionChat={null} querySession={querySession} isVSCodeRuntime={isVSCodeRuntime} />
                   <SyncAppEffects embeddedBackgroundWorkEnabled={embeddedBackgroundWorkEnabled} />
                   <MainLayout />
                   <Toaster />
