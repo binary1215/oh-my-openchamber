@@ -91,15 +91,19 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
       };
     }
 
+    const apiKey =
+      (typeof auth?.apiKey === 'string' && auth.apiKey.trim() ? auth.apiKey.trim() : null)
+      || (typeof auth?.key === 'string' && auth.key.trim() ? auth.key.trim() : null)
+      || (typeof auth?.token === 'string' && auth.token.trim() ? auth.token.trim() : null);
+
     return {
       npm: provider.configDescriptor.npm,
       name: provider.configDescriptor.name,
       options: {
         ...(provider.configDescriptor.options || {}),
         ...(typeof auth?.baseURL === 'string' && auth.baseURL.trim() ? { baseURL: auth.baseURL.trim() } : {}),
-        ...(typeof auth?.apiKey === 'string' && auth.apiKey.trim() ? { apiKey: auth.apiKey.trim() } : {}),
-        ...(typeof auth?.key === 'string' && auth.key.trim() ? { apiKey: auth.key.trim() } : {}),
-        ...(typeof auth?.token === 'string' && auth.token.trim() ? { apiKey: auth.token.trim() } : {}),
+        ...(apiKey ? { apiKey } : {}),
+        ...(apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : {}),
       },
       models: configModels,
     };
@@ -346,17 +350,7 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
 
   app.post('/api/session/:sessionId/prompt_async', async (req, res, next) => {
     try {
-      const parsedBody = req.body
-        && typeof req.body === 'object'
-        && Object.keys(req.body).length > 0
-          ? req.body
-          : null;
-      const parsedProviderId = typeof parsedBody?.model?.providerID === 'string' ? parsedBody.model.providerID : null;
-      if (!parsedProviderId || !runtimeManagedProviderCatalog[parsedProviderId]) {
-        return next();
-      }
-
-      const requestBody = parsedBody ?? await readPromptRequestBody(req);
+      const requestBody = await readPromptRequestBody(req);
       const providerId = typeof requestBody?.model?.providerID === 'string' ? requestBody.model.providerID : null;
       const modelId = typeof requestBody?.model?.modelID === 'string' ? requestBody.model.modelID : null;
       if (providerId && runtimeManagedProviderCatalog[providerId]) {
