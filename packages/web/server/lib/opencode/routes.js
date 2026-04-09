@@ -263,6 +263,24 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     };
   };
 
+  const buildSisyphusAgentAlias = (agents) => {
+    const source = agents.find((agent) => agent?.name === 'build') ?? agents.find((agent) => agent?.mode === 'primary');
+    if (!source) {
+      return null;
+    }
+
+    return {
+      ...source,
+      name: 'Sisyphus',
+      description: 'OMO ultrawork execution agent.',
+      native: false,
+      options: {
+        ...(source.options || {}),
+      },
+      __openchamberAgentAlias: 'build',
+    };
+  };
+
   const ensureRuntimeManagedProviderConfig = async (providerId, connectionState, options = {}) => {
     const provider = runtimeManagedProviderCatalog[providerId];
     if (!provider || !connectionState?.auth) {
@@ -348,9 +366,28 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     }
   });
 
+  app.get('/api/agent', async (_req, res) => {
+    try {
+      const payload = await fetchUpstreamJson('/agent');
+      const agents = Array.isArray(payload) ? payload : [];
+      const hasSisyphus = agents.some((agent) => agent?.name === 'Sisyphus');
+      if (hasSisyphus) {
+        return res.json(agents);
+      }
+
+      const sisyphusAlias = buildSisyphusAgentAlias(agents);
+      return res.json(sisyphusAlias ? [...agents, sisyphusAlias] : agents);
+    } catch (error) {
+      return res.status(500).json({ error: error.message || 'Failed to load agents' });
+    }
+  });
+
   app.post('/api/session/:sessionId/prompt_async', async (req, res, next) => {
     try {
       const requestBody = await readPromptRequestBody(req);
+      if (requestBody?.agent === 'Sisyphus') {
+        requestBody.agent = 'build';
+      }
       const providerId = typeof requestBody?.model?.providerID === 'string' ? requestBody.model.providerID : null;
       const modelId = typeof requestBody?.model?.modelID === 'string' ? requestBody.model.modelID : null;
       if (providerId && runtimeManagedProviderCatalog[providerId]) {
