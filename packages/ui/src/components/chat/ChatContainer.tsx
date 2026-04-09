@@ -43,6 +43,40 @@ const EMPTY_QUESTIONS: QuestionRequest[] = [];
 const IDLE_SESSION_STATUS = { type: 'idle' as const };
 const SESSION_RESELECTED_EVENT = 'openchamber:session-reselected';
 
+const dedupeSupersededAssistantSiblings = (messages: Array<{ info: Message; parts: Part[] }>) => {
+    const latestAssistantByParent = new Map<string, { info: Message; parts: Part[] }>();
+
+    for (const message of messages) {
+        if (message.info.role !== 'assistant' || !message.info.parentID) {
+            continue;
+        }
+
+        const previous = latestAssistantByParent.get(message.info.parentID);
+        if (!previous) {
+            latestAssistantByParent.set(message.info.parentID, message);
+            continue;
+        }
+
+        const previousTime = previous.info.time as { created?: number; completed?: number } | undefined;
+        const currentTime = message.info.time as { created?: number; completed?: number } | undefined;
+        const previousCompleted = previousTime?.completed ?? 0;
+        const currentCompleted = currentTime?.completed ?? 0;
+        const previousCreated = previousTime?.created ?? 0;
+        const currentCreated = currentTime?.created ?? 0;
+
+        if (currentCompleted > previousCompleted || (currentCompleted === previousCompleted && currentCreated >= previousCreated)) {
+            latestAssistantByParent.set(message.info.parentID, message);
+        }
+    }
+
+    return messages.filter((message) => {
+        if (message.info.role !== 'assistant' || !message.info.parentID) {
+            return true;
+        }
+        return latestAssistantByParent.get(message.info.parentID)?.info.id === message.info.id;
+    });
+};
+
 type HydratingToolSkeletonRow = {
     id: string;
     titleWidth: string;
@@ -115,7 +149,10 @@ export const ChatContainer: React.FC = () => {
     );
     // Messages from sync system
     const sessionMessageRecords = useSessionMessageRecords(currentSessionId ?? '');
-    const sessionMessages = currentSessionId ? sessionMessageRecords : EMPTY_MESSAGES;
+    const sessionMessages = React.useMemo(
+        () => (currentSessionId ? dedupeSupersededAssistantSiblings(sessionMessageRecords) : EMPTY_MESSAGES),
+        [currentSessionId, sessionMessageRecords],
+    );
 
     // Sessions from sync system
     const sessions = useSessions();

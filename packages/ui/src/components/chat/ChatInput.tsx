@@ -1040,6 +1040,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onOpenSettings, scrollToBo
 
         if (!primaryText && additionalParts.length === 0) return;
 
+        const inputTextSnapshot = !queuedOnly ? message : '';
+        const inputAttachmentsSnapshot = !queuedOnly ? [...attachedFiles] : [];
+        const queuedMessagesSnapshot = currentSessionId && hasQueuedMessages ? [...queuedMessages] : [];
+
         // Clear queue and input
         if (currentSessionId && hasQueuedMessages) {
             clearQueue(currentSessionId);
@@ -1149,17 +1153,51 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onOpenSettings, scrollToBo
             }
 
             if (isSoftNetworkError) {
+                if (!queuedOnly && inputTextSnapshot) {
+                    setMessage(inputTextSnapshot);
+                    saveStoredDraft(currentSessionId, inputTextSnapshot);
+                }
+                if (currentSessionId && queuedMessagesSnapshot.length > 0) {
+                    for (const queuedMsg of queuedMessagesSnapshot) {
+                        addToQueue(currentSessionId, {
+                            content: queuedMsg.content,
+                            attachments: queuedMsg.attachments,
+                            sendConfig: queuedMsg.sendConfig,
+                        });
+                    }
+                }
+                if (inputAttachmentsSnapshot.length > 0) {
+                    useInputStore.setState({ attachedFiles: inputAttachmentsSnapshot });
+                }
                 if (allAttachments.length > 0) {
-                    useInputStore.setState({ attachedFiles: allAttachments });
-                    toast.error('Failed to send attachments. Try fewer files or smaller images.');
+                    toast.error('Failed to send message. Attachments and draft were restored.');
+                } else {
+                    toast.error('Failed to send message. Your draft was restored.');
                 }
                 return;
             }
 
-            if (allAttachments.length > 0) {
-                useInputStore.setState({ attachedFiles: allAttachments });
+            if (!queuedOnly && inputTextSnapshot) {
+                setMessage(inputTextSnapshot);
+                saveStoredDraft(currentSessionId, inputTextSnapshot);
             }
-            toast.error(rawMessage || 'Message failed to send. Attachments restored.');
+            if (currentSessionId && queuedMessagesSnapshot.length > 0) {
+                for (const queuedMsg of queuedMessagesSnapshot) {
+                    addToQueue(currentSessionId, {
+                        content: queuedMsg.content,
+                        attachments: queuedMsg.attachments,
+                        sendConfig: queuedMsg.sendConfig,
+                    });
+                }
+            }
+            if (inputAttachmentsSnapshot.length > 0) {
+                useInputStore.setState({ attachedFiles: inputAttachmentsSnapshot });
+            }
+            if (allAttachments.length > 0) {
+                toast.error(rawMessage || 'Message failed to send. Draft and attachments restored.');
+            } else {
+                toast.error(rawMessage || 'Message failed to send. Draft restored.');
+            }
         });
 
         if (!isMobile) {
