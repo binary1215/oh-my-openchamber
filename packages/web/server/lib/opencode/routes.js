@@ -67,6 +67,36 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     message,
   });
 
+  const buildRuntimeManagedProviderConfig = ({ provider, auth, models = null, selectedModelId = null }) => {
+    const normalizedModels = models && typeof models === 'object' ? models : Object.create(null);
+    const configModels = Object.create(null);
+
+    for (const [modelId, model] of Object.entries(normalizedModels)) {
+      if (!modelId) continue;
+      configModels[modelId] = {
+        id: `${provider.id}/${modelId}`,
+        name: typeof model?.name === 'string' && model.name.trim() ? model.name.trim() : modelId,
+      };
+    }
+
+    if (selectedModelId && !configModels[selectedModelId]) {
+      configModels[selectedModelId] = {
+        id: `${provider.id}/${selectedModelId}`,
+        name: selectedModelId,
+      };
+    }
+
+    return {
+      npm: provider.configDescriptor.npm,
+      name: provider.configDescriptor.name,
+      options: {
+        ...(provider.configDescriptor.options || {}),
+        ...(typeof auth?.baseURL === 'string' && auth.baseURL.trim() ? { baseURL: auth.baseURL.trim() } : {}),
+      },
+      models: configModels,
+    };
+  };
+
   const inferDiscoveryMetadataFromModels = (provider) => {
     const models = createProviderModelsRecord(provider);
     return {
@@ -216,9 +246,10 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     }
 
     const hydrationPromise = (async () => {
-      upsertProviderConfig(providerId, null, 'user', {
-        ...provider.defaultConfig,
-      });
+      upsertProviderConfig(providerId, null, 'user', buildRuntimeManagedProviderConfig({
+        provider,
+        auth,
+      }));
 
       if (sources.user) {
         sources.user.exists = true;
@@ -294,11 +325,18 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
 
       const requestBody = parsedBody ?? await readPromptRequestBody(req);
       const providerId = typeof requestBody?.model?.providerID === 'string' ? requestBody.model.providerID : null;
+      const modelId = typeof requestBody?.model?.modelID === 'string' ? requestBody.model.modelID : null;
       if (providerId && runtimeManagedProviderCatalog[providerId]) {
         const connectionState = await resolveProviderConnectionState(providerId, req, {
           tolerateMissingDirectory: true,
         });
         await ensureRuntimeManagedProviderConfig(providerId, connectionState, { force: true });
+        upsertProviderConfig(providerId, null, 'user', buildRuntimeManagedProviderConfig({
+          provider: runtimeManagedProviderCatalog[providerId],
+          auth: connectionState.auth,
+          selectedModelId: modelId,
+        }));
+        await refreshOpenCodeAfterConfigChange(`provider ${providerId} model ${modelId ?? 'unknown'} prepared for prompt`);
       }
 
       const query = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
@@ -461,9 +499,10 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
 
       const runtimeManagedProvider = runtimeManagedProviderCatalog[providerId];
       if (runtimeManagedProvider) {
-        upsertProviderConfig(providerId, null, 'user', {
-          ...runtimeManagedProvider.defaultConfig,
-        });
+        upsertProviderConfig(providerId, null, 'user', buildRuntimeManagedProviderConfig({
+          provider: runtimeManagedProvider,
+          auth: nextAuth,
+        }));
       }
 
       const saved = upsertProviderAuth(providerId, nextAuth);

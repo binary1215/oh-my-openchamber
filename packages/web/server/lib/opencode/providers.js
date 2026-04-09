@@ -13,6 +13,11 @@ const RUNTIME_MANAGED_PROVIDERS = Object.freeze({
     connectMode: 'api',
     supportsBaseUrl: true,
     defaultConfig: Object.freeze({}),
+    configDescriptor: Object.freeze({
+      npm: '@ai-sdk/ollama',
+      name: 'Ollama',
+      options: Object.freeze({}),
+    }),
   }),
   litellm: Object.freeze({
     id: 'litellm',
@@ -20,6 +25,11 @@ const RUNTIME_MANAGED_PROVIDERS = Object.freeze({
     connectMode: 'api',
     supportsBaseUrl: true,
     defaultConfig: Object.freeze({}),
+    configDescriptor: Object.freeze({
+      npm: '@ai-sdk/openai-compatible',
+      name: 'LiteLLM',
+      options: Object.freeze({ litellmProxy: true }),
+    }),
   }),
 });
 

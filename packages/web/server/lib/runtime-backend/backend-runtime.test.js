@@ -629,7 +629,15 @@ describe('backend runtime integration', () => {
         providerID: 'litellm',
         workingDirectory: null,
         scope: 'user',
-        providerConfig: {},
+        providerConfig: {
+          npm: '@ai-sdk/openai-compatible',
+          name: 'LiteLLM',
+          options: {
+            baseURL: 'http://192.168.0.8:4000/v1',
+            litellmProxy: true,
+          },
+          models: {},
+        },
       },
     ]);
   });
@@ -694,7 +702,15 @@ describe('backend runtime integration', () => {
           providerID: 'litellm',
           workingDirectory: null,
           scope: 'user',
-          providerConfig: {},
+          providerConfig: {
+            npm: '@ai-sdk/openai-compatible',
+            name: 'LiteLLM',
+            options: {
+              baseURL: 'http://192.168.0.8:4000/v1',
+              litellmProxy: true,
+            },
+            models: {},
+          },
         },
       ]);
       expect(refreshCalls).toEqual(['provider litellm config restored from auth']);
