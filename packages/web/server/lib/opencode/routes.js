@@ -79,14 +79,14 @@ export const registerOpenCodeRoutes = (app, dependencies) => {
     for (const [modelId, model] of Object.entries(normalizedModels)) {
       if (!modelId) continue;
       configModels[modelId] = {
-        id: `${provider.id}/${modelId}`,
+        id: modelId,
         name: typeof model?.name === 'string' && model.name.trim() ? model.name.trim() : modelId,
       };
     }
 
     if (selectedModelId && !configModels[selectedModelId]) {
       configModels[selectedModelId] = {
-        id: `${provider.id}/${selectedModelId}`,
+        id: selectedModelId,
         name: selectedModelId,
       };
     }
