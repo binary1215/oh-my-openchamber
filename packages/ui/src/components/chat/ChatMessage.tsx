@@ -63,6 +63,13 @@ const normalizeToolName = (toolName: unknown): string => {
     return parts[parts.length - 1] ?? withoutIndex;
 };
 
+const resolvePreferredAgentName = (messageAgent?: string, previousUserAgent?: string) => {
+    if (previousUserAgent === 'Sisyphus' && messageAgent === 'build') {
+        return 'Sisyphus';
+    }
+    return messageAgent;
+};
+
 const readExpandedToolsCache = (messageId: string): Set<string> => {
     const cached = expandedToolsStateCache.get(messageId);
     return cached ? new Set(cached) : new Set();
@@ -299,12 +306,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
 
         const messageMode = getMessageInfoProp(message.info, 'mode');
         if (typeof messageMode === 'string' && messageMode.trim().length > 0) {
-            return messageMode;
+            return resolvePreferredAgentName(messageMode, previousUserMetadata?.agentName);
         }
 
         const messageAgent = getMessageInfoProp(message.info, 'agent');
         if (typeof messageAgent === 'string' && messageAgent.trim().length > 0) {
-            return messageAgent;
+            return resolvePreferredAgentName(messageAgent, previousUserMetadata?.agentName);
         }
 
         if (previousUserMetadata?.agentName) {
