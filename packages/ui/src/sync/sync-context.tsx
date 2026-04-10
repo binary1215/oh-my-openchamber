@@ -790,15 +790,25 @@ export function useIsSessionWorking(sessionID: string, directory?: string): bool
 
     // Check for incomplete assistant message (fallback if status event delayed)
     let hasPendingAssistant = false
+    let hasCompletedTrailingAssistant = false
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i]
       if (m.role === "assistant" && typeof (m as { time?: { completed?: number } }).time?.completed !== "number") {
         hasPendingAssistant = true
         break
       }
+      if (m.role === "assistant" && typeof (m as { time?: { completed?: number } }).time?.completed === "number") {
+        hasCompletedTrailingAssistant = true
+        break
+      }
     }
 
-    if (hasAuthoritativeStatus) return statusWorking
+    if (hasAuthoritativeStatus) {
+      if (statusWorking && !hasPendingAssistant && hasCompletedTrailingAssistant) {
+        return false
+      }
+      return statusWorking
+    }
     return hasPendingAssistant
   }, [status, permissions, messages])
 }

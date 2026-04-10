@@ -49,9 +49,15 @@ export function useSessionActivity(sessionId: string | null | undefined, directo
 
     const hasAuthoritativeStatus = status !== undefined;
     const statusWorking = hasAuthoritativeStatus && phase !== 'idle';
+    const hasCompletedTrailingAssistant = Boolean(
+      lastMessage
+      && lastMessage.role === 'assistant'
+      && typeof (lastMessage as { time?: { completed?: number } }).time?.completed === 'number',
+    );
+    const shouldIgnoreStaleBusy = statusWorking && !hasPendingAssistant && hasCompletedTrailingAssistant;
     const isWorking = statusWorking || hasPendingAssistant;
 
-    if (hasAuthoritativeStatus && !statusWorking) return IDLE_RESULT;
+    if (hasAuthoritativeStatus && (!statusWorking || shouldIgnoreStaleBusy)) return IDLE_RESULT;
 
     if (!isWorking) return IDLE_RESULT;
 

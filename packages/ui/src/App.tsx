@@ -134,6 +134,7 @@ const EmbeddedSessionSelectionGate: React.FC<{
   const sync = useSync();
   const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
   const setCurrentSession = useSessionUIStore((state) => state.setCurrentSession);
+  const currentDirectory = useDirectoryStore((state) => state.currentDirectory);
 
   React.useEffect(() => {
     const target = embeddedSessionChat ?? querySession;
@@ -151,8 +152,26 @@ const EmbeddedSessionSelectionGate: React.FC<{
     }
 
     void setCurrentSession(target.sessionId, target.directory);
+  }, [currentSessionId, embeddedSessionChat, querySession, isVSCodeRuntime, sessions, setCurrentSession]);
+
+  React.useEffect(() => {
+    const target = embeddedSessionChat ?? querySession;
+    if (!target || isVSCodeRuntime) {
+      return;
+    }
+
+    if (currentSessionId !== target.sessionId) {
+      return;
+    }
+
+    const normalizedCurrent = currentDirectory?.trim() || '';
+    const normalizedTarget = target.directory?.trim() || '';
+    if (normalizedCurrent !== normalizedTarget) {
+      return;
+    }
+
     void sync.syncSession(target.sessionId);
-  }, [currentSessionId, embeddedSessionChat, querySession, isVSCodeRuntime, sessions, setCurrentSession, sync]);
+  }, [currentDirectory, currentSessionId, embeddedSessionChat, querySession, isVSCodeRuntime, sync]);
 
   return null;
 };
