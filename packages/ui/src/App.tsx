@@ -131,6 +131,7 @@ const EmbeddedSessionSelectionGate: React.FC<{
   isVSCodeRuntime: boolean;
 }> = ({ embeddedSessionChat, querySession, isVSCodeRuntime }) => {
   const sessions = useSessions();
+  const sync = useSync();
   const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
   const setCurrentSession = useSessionUIStore((state) => state.setCurrentSession);
 
@@ -144,12 +145,14 @@ const EmbeddedSessionSelectionGate: React.FC<{
       return;
     }
 
-    if (!sessions.some((session) => session.id === target.sessionId)) {
+    const isQuerySession = !embeddedSessionChat && !!querySession;
+    if (!isQuerySession && !sessions.some((session) => session.id === target.sessionId)) {
       return;
     }
 
     void setCurrentSession(target.sessionId, target.directory);
-  }, [currentSessionId, embeddedSessionChat, querySession, isVSCodeRuntime, sessions, setCurrentSession]);
+    void sync.syncSession(target.sessionId);
+  }, [currentSessionId, embeddedSessionChat, querySession, isVSCodeRuntime, sessions, setCurrentSession, sync]);
 
   return null;
 };
@@ -404,16 +407,17 @@ function App({ apis }: AppProps) {
   }, [embeddedSessionChat]);
 
   React.useEffect(() => {
-    if (!embeddedSessionChat?.directory || isVSCodeRuntime) {
+    const targetDirectory = embeddedSessionChat?.directory ?? querySession?.directory ?? null;
+    if (!targetDirectory || isVSCodeRuntime) {
       return;
     }
 
-    if (currentDirectory === embeddedSessionChat.directory) {
+    if (currentDirectory === targetDirectory) {
       return;
     }
 
-    setDirectory(embeddedSessionChat.directory, { showOverlay: false });
-  }, [currentDirectory, embeddedSessionChat, isVSCodeRuntime, setDirectory]);
+    setDirectory(targetDirectory, { showOverlay: false });
+  }, [currentDirectory, embeddedSessionChat, querySession, isVSCodeRuntime, setDirectory]);
 
   React.useEffect(() => {
     if (!embeddedSessionChat || typeof window === 'undefined') {
